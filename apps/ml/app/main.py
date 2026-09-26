@@ -1,7 +1,11 @@
 """FastAPI entrypoint for the Mosaic Vibe Detection ML Service."""
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.routes import vibe
 
@@ -20,6 +24,14 @@ app.add_middleware(
 )
 
 app.include_router(vibe.router, prefix="/api/vibe", tags=["vibe"])
+
+# Serve the test frontend
+static_dir = Path(__file__).parent.parent / "static"
+
+
+@app.get("/")
+async def serve_frontend() -> FileResponse:
+    return FileResponse(static_dir / "index.html")
 
 
 @app.get("/health")
