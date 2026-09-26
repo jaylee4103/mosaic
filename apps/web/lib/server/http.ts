@@ -12,7 +12,7 @@ export function json(data: unknown, status = 200, guest?: GuestSession): Respons
 export function routeError(error: unknown, guest?: GuestSession): Response {
   const code = error && typeof error === 'object' && 'code' in error ? (error as { code?: string }).code : undefined
   const status = code === 'SUPABASE_NOT_CONFIGURED' ? 503 :
-    code === 'APPROVAL_REQUIRED' || code === 'CHECKOUT_CONFLICT' ? 409 :
+    code === 'APPROVAL_REQUIRED' || code === 'CHECKOUT_CONFLICT' || code === 'LOCKED' ? 409 :
       code === 'LINK_CLI_UNAVAILABLE' ? 501 :
         code === 'NOT_FOUND' ? 404 :
           code === 'VALIDATION' ? 400 : 502

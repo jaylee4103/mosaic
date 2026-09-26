@@ -156,3 +156,35 @@ Request (either field optional): `{ "quantity": 2, "locked": true }`. Response `
 
 ### `DELETE /api/boards/:boardId/cart/items/:itemId`
 Response `200`, full cart (not `{ "ok": true }` — the point is to hand back fresh totals after removal).
+
+## Cart actions
+
+This is where "the AI decides what it wants to change; deterministic application code decides whether and how the change actually occurs" (root README) is enforced. The shopping agent proposes a batch of actions; Backend applies each independently — one invalid or blocked action does not fail the others — and returns both the per-action outcomes and the resulting cart.
+
+Actions reference products by **`productId`**, not the internal cart item id, since that's what the agent reasons about.
+
+### `POST /api/boards/:boardId/cart/actions`
+Request: `{ "actions": [ ... ] }`, 1–20 actions, each one of:
+```json
+{ "type": "ADD", "productId": "...", "quantity": 1 }
+{ "type": "REMOVE", "productId": "..." }
+{ "type": "REPLACE", "removeProductId": "...", "addProductId": "...", "quantity": 1 }
+{ "type": "LOCK", "productId": "..." }
+{ "type": "UNLOCK", "productId": "..." }
+{ "type": "SET_BUDGET", "budgetCents": 25000 }
+```
+`quantity` is optional on `ADD`/`REPLACE` (defaults to `1`). `SEARCH` is intentionally not an action here — it doesn't mutate the cart, so call `GET /api/products/search` directly, then submit `ADD` actions for whatever the agent decides to add.
+
+Response `200`:
+```json
+{
+  "results": [
+    { "type": "LOCK", "ok": true },
+    { "type": "REMOVE", "ok": false, "error": "Cannot change a locked item; unlock it first", "code": "LOCKED" }
+  ],
+  "cart": { "...": "the full cart, same shape as GET /api/boards/:boardId/cart" }
+}
+```
+Server-enforced rules: `ADD`/`REPLACE` still validate the product exists and is `available` (404) and reject duplicates (400), same as the plain cart endpoints. `REMOVE` and the outgoing side of `REPLACE` are rejected with `code: "LOCKED"` if the target item is locked — the agent must `UNLOCK` it first. `SET_BUDGET` is never blocked by the current total (an over-budget cart is a UI/agent concern, not a hard server constraint).
+
+A malformed body (not `{ actions: [...] }`), an empty `actions` array, or more than 20 actions is a request-level `400 VALIDATION` (the whole request fails, not per-action). A board owned by another guest is a request-level `404 NOT_FOUND`, checked once up front.
