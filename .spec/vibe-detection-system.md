@@ -239,7 +239,6 @@ Content-Type: application/json
 | 3 | **Confidence gating** | Decide whether vibe read is solid enough to present | Facet confidences + cluster stats | `Score` confidence; `Noul` if uncertain |
 | 4 | **Heterogeneity detection** | "Single cohesive vibe or mixed set?" | Cluster statistics as text/JSON | `Choice` + `Noul` |
 | 5 | **Candidate reranking** | Judge each candidate against target facets | Candidate features + target facets | `Score` per candidate |
-| 6 | **Cheap pre-triage** | Relevance/noise check before spending compute | Lightweight per-image metadata as text | `Choice` keep/discard |
 
 ### 7.4 Pricing
 
@@ -286,14 +285,48 @@ Content-Type: application/json
 │  │  FastAPI (Python 3.12+)                                │    │
 │  │                                                        │    │
 │  │  POST /api/vibe/analyze                                │    │
-│  │    ├── 1. Pre-triage (Jev: keep/discard images)       │    │
-│  │    ├── 2. SigLIP2 embedding (per image)               │    │
-│  │    ├── 3. VLM captioning (optional, per image)        │    │
-│  │    ├── 4. Zero-shot facet classification              │    │
-│  │    ├── 5. Set-level aggregation (majority-vote)       │    │
-│  │    ├── 6. Heterogeneity detection (Jev)               │    │
-│  │    ├── 7. Confidence gating (Jev)                     │    │
-│  │    └── 8. Composition (template or VLM bridge)         │    │
+│  │    ├── 1. SigLIP2 embedding (per image)               │    │
+│  │    ├── 2. VLM captioning (optional, per image)        │    │
+│  │    ├── 3. Zero-shot facet classification              │    │
+│  │    ├── 4. Set-level aggregation (majority-vote)       │    │
+│  │    ├── 5. Heterogeneity detection                     │    │
+│  │    ├── 6. Confidence gating                          │    │
+│  │    └── 7. Composition (template or VLM bridge)        │    │
+│  │    ├── 1. SigLIP2 embedding (per image)               │    │
+│  │    ├── 2. VLM captioning (optional, per image)        │    │
+│  │    ├── 3. Zero-shot facet classification              │    │
+│  │    ├── 4. Set-level aggregation (majority-vote)       │    │
+│  │    ├── 5. Heterogeneity detection                     │    │
+│  │    ├── 6. Confidence gating                          │    │
+│  │    └── 7. Composition (template or VLM bridge)        │    │
+│  │    ├── 1. SigLIP2 embedding (per image)               │    │
+│  │    ├── 2. VLM captioning (optional, per image)        │    │
+│  │    ├── 3. Zero-shot facet classification              │    │
+│  │    ├── 4. Set-level aggregation (majority-vote)       │    │
+│  │    ├── 5. Heterogeneity detection                     │    │
+│  │    ├── 6. Confidence gating                          │    │
+│  │    └── 7. Composition (template or VLM bridge)        │    │
+│  │    ├── 1. SigLIP2 embedding (per image)               │    │
+│  │    ├── 2. VLM captioning (optional, per image)        │    │
+│  │    ├── 3. Zero-shot facet classification              │    │
+│  │    ├── 4. Set-level aggregation (majority-vote)       │    │
+│  │    ├── 5. Heterogeneity detection                     │    │
+│  │    ├── 6. Confidence gating                          │    │
+│  │    └── 7. Composition (template or VLM bridge)        │    │
+│  │    ├── 1. SigLIP2 embedding (per image)               │    │
+│  │    ├── 2. VLM captioning (optional, per image)        │    │
+│  │    ├── 3. Zero-shot facet classification              │    │
+│  │    ├── 4. Set-level aggregation (majority-vote)       │    │
+│  │    ├── 5. Heterogeneity detection                     │    │
+│  │    ├── 6. Confidence gating                          │    │
+│  │    └── 7. Composition (template or VLM bridge)        │    │
+│  │    ├── 1. SigLIP2 embedding (per image)               │    │
+│  │    ├── 2. VLM captioning (optional, per image)        │    │
+│  │    ├── 3. Zero-shot facet classification              │    │
+│  │    ├── 4. Set-level aggregation (majority-vote)       │    │
+│  │    ├── 5. Heterogeneity detection                     │    │
+│  │    ├── 6. Confidence gating                          │    │
+│  │    └── 7. Composition (template or VLM bridge)        │    │
 │  │                                                        │    │
 │  │  Jev API calls (text/JSON state only)                 │    │
 │  └──────────────────────────────────────────────────────┘    │
