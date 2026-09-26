@@ -99,6 +99,26 @@ export async function getCart(
   return buildCart(cartRow, db)
 }
 
+// Resolves a product to its cart_items row so callers (e.g. cart-actions.ts)
+// that only know a productId — not the internal cart item id — can look up
+// or check the lock state before mutating.
+export async function findCartItemByProduct(
+  guestId: string,
+  boardId: string,
+  productId: string,
+  db: SupabaseClient = getSupabaseAdmin(),
+): Promise<{ id: string; locked: boolean } | null> {
+  const cartRow = await findOrCreateCartRow(guestId, boardId, db)
+  const { data, error } = await db
+    .from('cart_items')
+    .select('id, locked')
+    .eq('cart_id', cartRow.id)
+    .eq('product_id', productId)
+    .maybeSingle()
+  if (error) throw new Error('Could not look up cart item')
+  return data as { id: string; locked: boolean } | null
+}
+
 export async function addCartItem(
   guestId: string,
   boardId: string,

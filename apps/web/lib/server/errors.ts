@@ -5,3 +5,7 @@ export function notFoundError(message: string): Error {
 export function validationError(message: string): Error {
   return Object.assign(new Error(message), { code: 'VALIDATION' })
 }
+
+export function lockedError(message: string): Error {
+  return Object.assign(new Error(message), { code: 'LOCKED' })
+}

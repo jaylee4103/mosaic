@@ -24,6 +24,7 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | `POST /api/boards/:boardId/cart/items` | Add a product to the cart |
 | `PATCH /api/boards/:boardId/cart/items/:itemId` | Change a cart item's quantity or locked state |
 | `DELETE /api/boards/:boardId/cart/items/:itemId` | Remove an item from the cart |
+| `POST /api/boards/:boardId/cart/actions` | Apply a batch of AI-proposed cart actions (`ADD`/`REMOVE`/`REPLACE`/`LOCK`/`UNLOCK`/`SET_BUDGET`) |
 | `GET /api/demo/cart` | Show the fixed $1 + $2 two-store test cart |
 | `POST /api/demo/checkout` | Request separate Stripe Link test approvals |
 | `GET /api/demo/checkout` | Refresh approval statuses |
