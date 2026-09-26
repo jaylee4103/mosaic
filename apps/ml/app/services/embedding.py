@@ -8,18 +8,22 @@ import torch
 from PIL import Image
 from transformers import AutoModel, AutoProcessor
 
-from app.models.facets import FACET_VOCABULARIES, FacetProfile
+from app.models.facets import DOMAIN_AGNOSTIC_FACETS, FacetProfile
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "google/siglip2-base-patch16-224"
-PROMPT_TEMPLATE = "a photo of a {tag} style room"
+PROMPT_TEMPLATE = "a photo of {tag}"
 BASELINE_PROMPT = "a photo"
 TEMPERATURE = 10.0
 
 
 class EmbeddingService:
-    """SigLIP2-based image embedding and zero-shot facet classification."""
+    """SigLIP2-based image embedding and zero-shot facet classification.
+
+    Uses domain-agnostic facets (the "vibe interlingua") so the same
+    perception layer works for any image type — nature, interiors, products.
+    """
 
     def __init__(self, model_name: str = DEFAULT_MODEL, device: str | None = None):
         self.model_name = model_name
@@ -60,13 +64,16 @@ class EmbeddingService:
         image_embedding: list[float],
         vocabularies: dict[str, list[str]] | None = None,
     ) -> FacetProfile:
-        """Zero-shot classify an image against each facet's tag list.
+        """Zero-shot classify an image against domain-agnostic facet vocabularies.
 
         Uses softmax-normalized cosine similarities with negative prompting
-        for calibrated confidence scores.
+        for calibrated confidence scores. The domain-agnostic facets serve
+        as the "vibe interlingua" — they describe transferable qualities
+        (color, texture, light, energy, density) that work across any
+        image type and can be mapped to any target domain.
         """
         self._load()
-        vocabularies = vocabularies or FACET_VOCABULARIES
+        vocabularies = vocabularies or DOMAIN_AGNOSTIC_FACETS
 
         # Build text prompts for all tags
         all_prompts: list[str] = []

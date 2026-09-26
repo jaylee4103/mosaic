@@ -6,7 +6,7 @@ import os
 from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel
 
-from app.models.facets import FACET_VOCABULARIES, FacetProfile
+from app.models.facets import DOMAIN_AGNOSTIC_FACETS, FacetProfile
 from app.models.vibe import VibeResult
 from app.services.aggregation import AggregationService
 from app.services.embedding import EmbeddingService
@@ -77,10 +77,10 @@ async def analyze_images(
     is_mixed = await aggregator.detect_heterogeneity(embeddings)
     logger.info("Heterogeneity detection: mixed=%s", is_mixed)
 
-    # 3. Zero-shot facet classification per image
+    # 3. Zero-shot facet classification per image (domain-agnostic)
     per_image_facets: list[FacetProfile] = []
     for i, emb in enumerate(embeddings):
-        profile = await embedder.classify_facets(emb, FACET_VOCABULARIES)
+        profile = await embedder.classify_facets(emb, DOMAIN_AGNOSTIC_FACETS)
         logger.info("Image %d facets: %s", i, profile.surviving_facets())
         per_image_facets.append(profile)
 
