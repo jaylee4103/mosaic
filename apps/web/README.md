@@ -8,6 +8,14 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | --- | --- |
 | `GET /health` | Test server health |
 | `GET /api/guest` | Create or resume an HttpOnly guest session |
+| `GET /api/boards` | List the guest's boards |
+| `POST /api/boards` | Create a board |
+| `GET /api/boards/:boardId` | Get a board with signed image URLs and its vibe profile |
+| `PATCH /api/boards/:boardId` | Rename a board |
+| `DELETE /api/boards/:boardId` | Delete a board and its images |
+| `POST /api/boards/:boardId/images` | Upload an image (`multipart/form-data`) to the private bucket |
+| `PATCH /api/boards/:boardId/images/:imageId` | Update an image's note or position |
+| `DELETE /api/boards/:boardId/images/:imageId` | Delete an image and its storage object |
 | `GET /api/demo/cart` | Show the fixed $1 + $2 two-store test cart |
 | `POST /api/demo/checkout` | Request separate Stripe Link test approvals |
 | `GET /api/demo/checkout` | Refresh approval statuses |
@@ -15,6 +23,8 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | `POST /api/demo/checkout/payments` | Create separate Stripe test Checkout Sessions after approvals |
 | `GET /api/demo/checkout/payments` | Verify payment status and payment method with each test merchant |
 | `GET /api/demo/checkout/return` | Show a payment summary after a Stripe return |
+
+See `../../docs/board-commerce-api.md` for the full board, image, vibe profile, product, and cart request/response contract.
 
 Guest sessions and demo checkout state are stored in Supabase, so separate Next.js requests can resume the same cart. The second migration adds `demo_checkout_sessions` with an optimistic version check to reject conflicting writes. The browser roles have no direct access to these tables. The server secret key bypasses row level security, so each route resolves the guest cookie before loading checkout state.
 
