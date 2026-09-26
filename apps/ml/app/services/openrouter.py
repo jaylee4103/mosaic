@@ -1,8 +1,4 @@
-"""OpenRouter client — serves Jev (typesafe/jev-router) as the decision layer.
-
-Uses the Jev model via OpenRouter's Chat Completions API.
-Accepts text/JSON state and returns structured results.
-"""
+"""OpenRouter client — serves Jev (typesafe/jev-router) as the decision layer."""
 
 import json
 import logging
@@ -16,11 +12,7 @@ DEFAULT_MODEL = "typesafe/jev-router"
 
 
 class OpenRouterClient:
-    """Client for Jev on OpenRouter — structured decision-making.
-
-    Mimics the Jev interface: accepts text/JSON state,
-    returns structured answers with confidence scores.
-    """
+    """Client for Jev on OpenRouter — structured decision-making."""
 
     def __init__(self, api_key: str, model: str = DEFAULT_MODEL, timeout: float = 30.0):
         self.api_key = api_key
@@ -28,15 +20,7 @@ class OpenRouterClient:
         self.timeout = timeout
 
     async def _call(self, state: str | dict, system_prompt: str) -> dict:
-        """Make a single OpenRouter API call.
-
-        Args:
-            state: Text or JSON-serializable state to evaluate.
-            system_prompt: System prompt defining the task.
-
-        Returns:
-            Parsed JSON response from the model.
-        """
+        """Make a single OpenRouter API call."""
         if isinstance(state, dict):
             state = json.dumps(state, indent=2)
 
@@ -65,18 +49,17 @@ class OpenRouterClient:
                 response.raise_for_status()
                 data = response.json()
 
+            logger.info("OpenRouter response: %s", data)
             content = data["choices"][0]["message"]["content"]
-            return json.loads(content)
+            result = json.loads(content)
+            return result
         except (httpx.HTTPStatusError, json.JSONDecodeError, KeyError) as e:
             logger.warning("OpenRouter call failed: %s — using fallback", e)
             return {}
 
     async def check_relevance(self, image_url: str, content_type: str) -> bool:
         """Pre-triage: is this image relevant for vibe analysis?"""
-        state = json.dumps({
-            "image_filename": image_url,
-            "content_type": content_type,
-        })
+        state = json.dumps({"image_filename": image_url, "content_type": content_type})
         system = (
             "You are an image relevance classifier. Determine if an image is a "
             "photograph of a real-world scene, interior, landscape, or styled object. "
@@ -90,7 +73,7 @@ class OpenRouterClient:
         """Confidence gating: is the vibe read solid enough to present?"""
         system = (
             "You are a vibe analysis confidence evaluator. Given a facet profile, "
-            "score how confident you are that it accurately describes the vibe of an image set. "
+            "score how confident you are that it accurately describes the vibe. "
             'Respond with JSON: {"confidence": 0.0-1.0}'
         )
         result = await self._call(facet_profile_json, system)
