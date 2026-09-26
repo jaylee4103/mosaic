@@ -3,16 +3,21 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 export type FakeRow = Record<string, unknown>
 type QueryResult = { data: unknown; error: { message: string } | null; count?: number }
 
-function matches(row: FakeRow, filters: Array<[string, unknown]>): boolean {
-  return filters.every(([key, value]) => row[key] === value)
+function ilikeToRegExp(pattern: string): RegExp {
+  const escaped = pattern
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/%/g, '.*')
+    .replace(/_/g, '.')
+  return new RegExp(`^${escaped}$`, 'i')
 }
 
 class FakeQueryBuilder implements PromiseLike<QueryResult> {
-  private filters: Array<[string, unknown]> = []
+  private predicates: Array<(row: FakeRow) => boolean> = []
   private orderBy: { column: string; ascending: boolean } | undefined
-  private mode: 'select' | 'insert' | 'update' | 'delete' = 'select'
+  private mode: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select'
   private payload: FakeRow | undefined
   private countOnly = false
+  private upsertConflictColumn: string | undefined
 
   constructor(private table: FakeRow[]) {}
 
@@ -22,7 +27,29 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
   }
 
   eq(column: string, value: unknown): this {
-    this.filters.push([column, value])
+    this.predicates.push((row) => row[column] === value)
+    return this
+  }
+
+  ilike(column: string, pattern: string): this {
+    const regExp = ilikeToRegExp(pattern)
+    this.predicates.push((row) => regExp.test(String(row[column] ?? '')))
+    return this
+  }
+
+  lte(column: string, value: number): this {
+    this.predicates.push((row) => (row[column] as number) <= value)
+    return this
+  }
+
+  gte(column: string, value: number): this {
+    this.predicates.push((row) => (row[column] as number) >= value)
+    return this
+  }
+
+  in(column: string, values: unknown[]): this {
+    const set = new Set(values)
+    this.predicates.push((row) => set.has(row[column]))
     return this
   }
 
@@ -34,6 +61,13 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
   insert(row: FakeRow): this {
     this.mode = 'insert'
     this.payload = row
+    return this
+  }
+
+  upsert(row: FakeRow, options?: { onConflict?: string }): this {
+    this.mode = 'upsert'
+    this.payload = row
+    this.upsertConflictColumn = options?.onConflict
     return this
   }
 
@@ -49,13 +83,27 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
   }
 
   private matchedRows(): FakeRow[] {
-    return this.table.filter((row) => matches(row, this.filters))
+    return this.table.filter((row) => this.predicates.every((predicate) => predicate(row)))
   }
 
   private resolve(): QueryResult {
     const now = new Date().toISOString()
     if (this.mode === 'insert') {
       const row: FakeRow = { id: crypto.randomUUID(), created_at: now, updated_at: now, ...this.payload }
+      this.table.push(row)
+      return { data: row, error: null }
+    }
+    if (this.mode === 'upsert') {
+      const payload = this.payload as FakeRow
+      const conflictColumn = this.upsertConflictColumn
+      const existing = conflictColumn
+        ? this.table.find((row) => row[conflictColumn] === payload[conflictColumn])
+        : undefined
+      if (existing) {
+        Object.assign(existing, payload)
+        return { data: existing, error: null }
+      }
+      const row: FakeRow = { id: crypto.randomUUID(), created_at: now, ...payload }
       this.table.push(row)
       return { data: row, error: null }
     }
@@ -141,6 +189,8 @@ export function createFakeSupabase(seed: Record<string, FakeRow[]> = {}) {
     boards: seed.boards ?? [],
     board_images: seed.board_images ?? [],
     vibe_profiles: seed.vibe_profiles ?? [],
+    merchants: seed.merchants ?? [],
+    products: seed.products ?? [],
   }
   const objects = new Map<string, Uint8Array>()
 

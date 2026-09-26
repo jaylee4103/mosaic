@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "bun test"
+    "test": "bun test",
+    "seed:products": "bun run scripts/seed-products.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

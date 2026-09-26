@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { listBoardImageRecords, removeBoardImageStorage, signImages, type BoardImage } from './board-images'
 import { notFoundError, validationError } from './errors'
 import { getSupabaseAdmin } from './supabase'
+import { findVibeProfile, type VibeProfile } from './vibe-profile'
 
 export type Board = {
   id: string
@@ -10,12 +11,7 @@ export type Board = {
   updatedAt: string
 }
 
-export type VibeProfile = {
-  name: string
-  description: string | null
-  profile: Record<string, unknown>
-  updatedAt: string
-}
+export type { VibeProfile }
 
 export type BoardDetail = Board & {
   images: BoardImage[]
@@ -77,22 +73,11 @@ export async function getBoard(
   db: SupabaseClient = getSupabaseAdmin(),
 ): Promise<BoardDetail> {
   const row = await findOwnedBoardRow(guestId, boardId, db)
-  const [imageRecords, vibeRow] = await Promise.all([
+  const [imageRecords, vibeProfile] = await Promise.all([
     listBoardImageRecords(boardId, db),
-    db.from('vibe_profiles').select('name, description, profile_json, updated_at').eq('board_id', boardId).maybeSingle(),
+    findVibeProfile(boardId, db),
   ])
-  if (vibeRow.error) throw new Error('Could not load vibe profile')
-
   const images = await signImages(imageRecords, db)
-  const vibeProfile: VibeProfile | null = vibeRow.data
-    ? {
-        name: vibeRow.data.name,
-        description: vibeRow.data.description,
-        profile: vibeRow.data.profile_json,
-        updatedAt: vibeRow.data.updated_at,
-      }
-    : null
-
   return { ...mapBoard(row), images, vibeProfile }
 }
 

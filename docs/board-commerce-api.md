@@ -1,6 +1,6 @@
 # Board and commerce API contract
 
-This is the contract for Backend's endpoints under `apps/web/app/api/`. It is the source of truth for Frontend and AI while they integrate. Boards and board images are implemented today; vibe profile, products, and cart are shape-only until later milestones.
+This is the contract for Backend's endpoints under `apps/web/app/api/`. It is the source of truth for Frontend and AI while they integrate. Boards, board images, the vibe profile, and product search are implemented today; cart is shape-only until a later milestone.
 
 ## Conventions
 
@@ -39,13 +39,13 @@ Response `200`:
     { "id": "...", "url": "https://...signed...", "note": "cozy corner", "position": 0, "createdAt": "..." }
   ],
   "vibeProfile": {
-    "name": "Sun-Washed Mediterranean", "description": "...",
-    "profile": { "colors": ["cream", "terracotta"], "materials": ["linen"], "qualities": ["warm"] },
+    "name": "Sun-Washed Mediterranean", "description": null,
+    "profile": { "phrase": "Sun-Washed Mediterranean", "facets": { "...": "..." }, "confidence": 0.83, "mixed": false, "target_domain": null, "message": null },
     "updatedAt": "..."
   }
 }
 ```
-`vibeProfile` is `null` until the AI service (or a later step) writes one. `images[].url` is a signed URL valid for 1 hour — re-fetch the board to refresh it; never persist or share it long-term.
+`vibeProfile` is `null` until AI writes one via `PUT /api/boards/:boardId/vibe-profile` (see below for the real shape). `images[].url` is a signed URL valid for 1 hour — re-fetch the board to refresh it; never persist or share it long-term.
 `404 { "code": "NOT_FOUND" }` if the board doesn't exist or belongs to another guest.
 
 ### `PATCH /api/boards/:boardId`
@@ -69,33 +69,61 @@ Request (both fields optional): `{ "note": "updated note", "position": 2 }`. Res
 ### `DELETE /api/boards/:boardId/images/:imageId`
 Removes the storage object and the row. Response `200 { "ok": true }`.
 
-## Vibe profile (shape only — not yet implemented)
+## Vibe profile
+
+Backend does not define the shape of a vibe profile — it stores and returns exactly what `apps/ml`'s `VibeResult` produces (`apps/ml/app/models/vibe.py`), keys as-is (snake_case included). If AI changes that model's fields, no Backend change is required; the new fields just flow through.
 
 ### `GET /api/boards/:boardId/vibe-profile`
-Same shape as the `vibeProfile` field above, or `404` if none exists yet.
+Response `200`:
+```json
+{
+  "name": "Sun-Washed Mediterranean",
+  "description": null,
+  "profile": {
+    "phrase": "Sun-Washed Mediterranean",
+    "facets": {
+      "style_archetype": "coastal", "material": "linen", "color_tone": "warm", "era_mood": "timeless",
+      "color_palette": "warm earth tones", "texture_quality": "natural", "light_quality": "golden",
+      "energy_mood": "calm", "density_complexity": "balanced",
+      "confidence": { "style_archetype": 0.82, "material": 0.71 }
+    },
+    "confidence": 0.83, "mixed": false, "target_domain": null, "message": null
+  },
+  "updatedAt": "..."
+}
+```
+`404 { "code": "NOT_FOUND" }` if the board has no saved vibe profile yet (or isn't yours).
 
 ### `PUT /api/boards/:boardId/vibe-profile`
-Request:
-```json
-{ "name": "Sun-Washed Mediterranean", "description": "...", "profile": { "colors": [...], "materials": [...], "qualities": [...] } }
-```
-`profile` is an arbitrary JSON object produced by the AI service (or edited by the user); Backend stores it as-is in `profile_json`.
+Request body: **exactly the `vibe` object from `apps/ml`'s `POST /api/vibe/analyze` response** (`{ phrase, facets, confidence, mixed, target_domain, message }`), forwarded unmodified. Upserts one profile per board. Response `200`, same shape as the `GET` above.
 
-## Products (shape only — not yet implemented)
+Backend only reads two fields out of the body for the `name`/`description` columns already required by the schema: `phrase` → `name` (empty string if absent), `message` → `description` (`null` if absent). Everything else — including `facets` — is stored verbatim in `profile` and is not validated or reshaped.
+
+## Products
+
+This is the `searchProducts(query, category, maxPrice)` interface from the root README's "Product discovery" section, provider-agnostic by design: today it queries a seeded two-store demo catalog (`apps/web/scripts/seed-products.ts`), but the response shape is meant to stay stable if the underlying provider changes later (a real merchant feed, marketplace API, etc.).
+
+This endpoint does **not** require or set the guest cookie — the catalog isn't guest-scoped, so it's a plain unauthenticated read.
 
 ### `GET /api/products/search?query=&category=&maxPrice=`
+All query params are optional.
+- `query`: case-insensitive substring match against the product name.
+- `category`: case-insensitive exact match (e.g. `lighting`, `furniture`, `decor`, `textiles`).
+- `maxPrice`: in cents; excludes products priced above it.
+
+Only `available: true` products are returned. Response `200`:
 ```json
 {
   "products": [
     {
-      "id": "...", "merchantId": "...", "merchantName": "...",
+      "id": "...", "merchantId": "...", "merchantName": "Sol & Clay",
       "name": "Ceramic Bedside Lamp", "description": "...", "category": "lighting",
-      "priceCents": 5500, "currency": "usd", "imageUrl": "...", "productUrl": "...", "available": true
+      "priceCents": 5500, "currency": "usd", "imageUrl": null, "productUrl": "...", "available": true
     }
   ]
 }
 ```
-`maxPrice` is in cents. AI owns query generation and vibe-based ranking on top of these results.
+AI owns query generation and vibe-based ranking on top of these results.
 
 ## Cart (shape only — not yet implemented)
 
