@@ -6,7 +6,7 @@ All three migrations were applied through the SQL Editor to the `mosaic` project
 
 The `mosaic-board-images` bucket is present in that project. It is private, has a 10 MB file limit, and accepts JPEG, PNG, and WebP.
 
-The demo catalog was seeded in that project with 2 test merchants and 10 products on September 26, 2026. Re-running `bun run seed:products` from `apps/web/` is safe because it upserts by merchant slug and product external ID.
+The demo catalog was seeded in that project with 2 test merchants and 14 products across home and fashion on September 26, 2026. Re-running `bun run seed:products` from `apps/web/` is safe because it upserts by merchant slug and product external ID.
 
 ## Set up another project
 

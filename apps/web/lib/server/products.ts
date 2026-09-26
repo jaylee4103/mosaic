@@ -74,11 +74,21 @@ export async function searchProducts(
 
   if (filters.category) request = request.ilike('category', filters.category)
   if (typeof filters.maxPriceCents === 'number') request = request.lte('price_cents', filters.maxPriceCents)
-  if (filters.query) request = request.ilike('name', `%${filters.query}%`)
-
   const { data, error } = await request
   if (error) throw new Error('Could not search products')
-  return attachMerchantNames((data ?? []) as ProductRow[], db)
+  // The seeded catalog is small. Match generated multi-word searches against
+  // names, descriptions, and categories so a phrase such as "warm ceramic
+  // lamp" can retrieve candidates for AI ranking. A larger provider should
+  // replace this with indexed search while preserving the response contract.
+  const tokens = [...new Set(filters.query?.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])]
+  const candidates = ((data ?? []) as ProductRow[]).map((row) => {
+    const searchable = `${row.name} ${row.description ?? ''} ${row.category ?? ''}`.toLowerCase()
+    return { row, score: tokens.filter((token) => searchable.includes(token)).length }
+  })
+  const bestScore = Math.max(0, ...candidates.map((candidate) => candidate.score))
+  const rows = candidates.filter((candidate) => tokens.length === 0 || (candidate.score > 0 && candidate.score === bestScore))
+    .map((candidate) => candidate.row)
+  return attachMerchantNames(rows, db)
 }
 
 // Used by the cart service to resolve current catalog prices/details for
