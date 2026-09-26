@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { assertBoardOwnership } from './board-ownership'
 import { notFoundError, validationError } from './errors'
 import { getSupabaseAdmin } from './supabase'
 
@@ -41,17 +42,6 @@ function mapRow(row: ImageRow): BoardImageRecord {
     position: row.position,
     createdAt: row.created_at,
   }
-}
-
-async function assertBoardOwnership(guestId: string, boardId: string, db: SupabaseClient): Promise<void> {
-  const { data, error } = await db
-    .from('boards')
-    .select('id')
-    .eq('id', boardId)
-    .eq('guest_session_id', guestId)
-    .maybeSingle()
-  if (error) throw new Error('Could not look up board')
-  if (!data) throw notFoundError('Board not found')
 }
 
 export async function listBoardImageRecords(
