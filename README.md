@@ -67,6 +67,19 @@ The same aesthetic can drive searches for:
 - Travel products
 - Anything else the user asks for
 
+A board is not required to look like a mood board at all. A board containing mountains, trees, lakes, snow, and rocks might become:
+
+**Wooded Alpine**
+
+- Slate gray, moss green, and bark brown
+- Wool, flannel, canvas, and raw wood
+- Rugged textures
+- Layered silhouettes
+- Natural and gorpcore
+- Outdoorsy influence
+
+Nothing in the source photos is a product, and nothing in them is furniture or clothing. The profile still transfers the same way — the user can later ask for an outfit, a room, or a poster, and Mosaic applies **Wooded Alpine** to whichever category is requested.
+
 ## End-to-end system
 
 ```mermaid
@@ -164,6 +177,8 @@ Users can optionally annotate images to communicate what matters about them.
 For example:
 
 > “I like the colors and textures in this image, not the actual furniture.”
+
+The images do not need to depict interiors, furniture, or fashion at all. A board of mountains, trees, lakes, snow, and rocks is a valid input — Mosaic should read that as an **outdoorsy / gorpcore / natural / wooded** vibe, not fail to produce a profile because nothing in the photos is a "product." The user decides afterward what category that vibe applies to (an outfit, a room, a poster, anything).
 
 ### 3. Understand
 

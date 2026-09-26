@@ -7,7 +7,7 @@ import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import silhouette_score
 
-from app.models.facets import FacetProfile
+from app.models.facets import FACET_VOCABULARIES, FacetProfile
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +26,7 @@ class AggregationService:
         if not per_image_facets:
             return FacetProfile()
 
-        facet_names = [
-            "color_palette", "texture_quality", "light_quality",
-            "energy_mood", "density_complexity",
-        ]
+        facet_names = [*FACET_VOCABULARIES.keys(), "color"]
 
         aggregated = FacetProfile()
         confidence: dict[str, float] = {}
@@ -79,42 +76,17 @@ class AggregationService:
         return score > SILHOUETTE_THRESHOLD
 
     def compose_phrase(self, profile: FacetProfile) -> str:
-        """Compose a vibe phrase from domain-agnostic facets."""
+        """Compose a vibe phrase from all facets."""
         parts: list[str] = []
-        if profile.texture_quality:
-            parts.append(profile.texture_quality)
-        if profile.color_palette:
-            parts.append(profile.color_palette)
-        if profile.light_quality:
-            parts.append(profile.light_quality)
-        if profile.energy_mood:
-            parts.append(profile.energy_mood)
-        if profile.density_complexity:
-            parts.append(profile.density_complexity)
+        if profile.quality:
+            parts.append(profile.quality)
+        if profile.color:
+            parts.append(profile.color)
+        if profile.style:
+            parts.append(profile.style)
+        if profile.material:
+            parts.append(profile.material)
 
         phrase = " ".join(parts) if parts else ""
         logger.info("Composed phrase: '%s' from parts: %s", phrase, parts)
-        return phrase
-
-    async def compose_cross_domain(
-        self,
-        profile: FacetProfile,
-        target_domain: str,
-    ) -> str:
-        """Compose a cross-domain recommendation phrase."""
-        descriptors: list[str] = []
-        if profile.color_palette:
-            descriptors.append(profile.color_palette)
-        if profile.texture_quality:
-            descriptors.append(profile.texture_quality)
-        if profile.light_quality:
-            descriptors.append(profile.light_quality)
-        if profile.energy_mood:
-            descriptors.append(profile.energy_mood)
-        if profile.density_complexity:
-            descriptors.append(profile.density_complexity)
-
-        vibe_description = ", ".join(descriptors) if descriptors else "eclectic"
-        phrase = f"{vibe_description} {target_domain.replace('_', ' ')}"
-        logger.info("Cross-domain phrase: '%s'", phrase)
         return phrase

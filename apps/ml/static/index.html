@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mosaic Vibe Detector — Test</title>
+    <title>Mosaic Vibe Detector</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -28,7 +28,7 @@
             width: 100%;
             max-width: 480px;
         }
-        .upload-zone:hover, .upload-zone.dragover { border-color: #8b5cf6; }
+        .upload-zone:hover { border-color: #8b5cf6; }
         .upload-zone input { display: none; }
         .upload-zone p { color: #a1a1aa; margin-top: 0.5rem; }
         .preview-grid {
@@ -44,21 +44,6 @@
             object-fit: cover;
             border-radius: 8px;
         }
-        .controls {
-            display: flex;
-            gap: 1rem;
-            margin: 1.5rem 0;
-            align-items: center;
-        }
-        .controls label { color: #a1a1aa; font-size: 0.875rem; }
-        .controls select {
-            background: #18181b;
-            color: #fafafa;
-            border: 1px solid #3f3f46;
-            border-radius: 6px;
-            padding: 0.5rem 1rem;
-            font-size: 0.875rem;
-        }
         button {
             background: #8b5cf6;
             color: white;
@@ -69,6 +54,7 @@
             font-weight: 500;
             cursor: pointer;
             transition: background 0.2s;
+            margin-top: 1.5rem;
         }
         button:hover { background: #7c3aed; }
         button:disabled { background: #3f3f46; cursor: not-allowed; }
@@ -84,7 +70,7 @@
         .result.show { display: block; }
         .result h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #8b5cf6; }
         .result .phrase {
-            font-size: 1.5rem;
+            font-size: 1.25rem;
             font-weight: 600;
             margin-bottom: 1rem;
         }
@@ -134,22 +120,6 @@
         <div class="preview-grid" id="previewGrid"></div>
     </div>
 
-    <div class="controls">
-        <label for="mode">Mode:</label>
-        <select id="mode">
-            <option value="intra">Intra-domain (describe vibe)</option>
-            <option value="cross">Cross-domain (recommend)</option>
-        </select>
-        <label for="domain">Target:</label>
-        <select id="domain">
-            <option value="">Auto-route</option>
-            <option value="outfit">Outfit</option>
-            <option value="home_goods">Home Goods</option>
-            <option value="music">Music</option>
-            <option value="art">Art</option>
-        </select>
-    </div>
-
     <button id="analyzeBtn" disabled>Analyze</button>
 
     <div class="loading" id="loading">Analyzing...</div>
@@ -167,8 +137,6 @@
         const fileInput = document.getElementById('fileInput');
         const previewGrid = document.getElementById('previewGrid');
         const analyzeBtn = document.getElementById('analyzeBtn');
-        const modeSelect = document.getElementById('mode');
-        const domainSelect = document.getElementById('domain');
         const loading = document.getElementById('loading');
         const error = document.getElementById('error');
         const result = document.getElementById('result');
@@ -209,8 +177,6 @@
 
             const formData = new FormData();
             files.forEach(f => formData.append('files', f));
-            formData.append('mode', modeSelect.value);
-            if (domainSelect.value) formData.append('target_domain', domainSelect.value);
 
             loading.style.display = 'block';
             error.textContent = '';
@@ -237,9 +203,8 @@
                     facets.appendChild(div);
                 });
                 meta.innerHTML = `
-                    <span>Confidence: ${(vibe.confidence * 100).toFixed(0)}%</span>
+                    <span>Confidence: ${(vibe.confidence * 100).toFixed(4)}%</span>
                     <span>Mixed: ${vibe.mixed ? 'Yes' : 'No'}</span>
-                    ${vibe.target_domain ? `<span>Domain: ${vibe.target_domain}</span>` : ''}
                 `;
                 result.classList.add('show');
             } catch (err) {

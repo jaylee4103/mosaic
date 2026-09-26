@@ -1,25 +1,21 @@
 """Vibe detection route — image upload → embedding → aggregation → vibe phrase."""
 
 import logging
-import os
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel
 
-from app.models.facets import DOMAIN_AGNOSTIC_FACETS, FacetProfile
+from app.models.facets import FACET_VOCABULARIES, FacetProfile
 from app.models.vibe import VibeResult
 from app.services.aggregation import AggregationService
 from app.services.color import get_color_palette_name
 from app.services.embedding import EmbeddingService
-from app.services.jev import JevClient
-from app.services.openrouter import OpenRouterClient
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 _embedding_service: EmbeddingService | None = None
-_decision_client: JevClient | OpenRouterClient | None = None
 _aggregation_service: AggregationService | None = None
 
 
@@ -28,19 +24,6 @@ def get_embedding_service() -> EmbeddingService:
     if _embedding_service is None:
         _embedding_service = EmbeddingService()
     return _embedding_service
-
-
-def get_decision_client() -> JevClient | OpenRouterClient | None:
-    global _decision_client
-    if _decision_client is None:
-        jev_key = os.environ.get("TYPESAFE_API_KEY")
-        if jev_key:
-            _decision_client = JevClient(api_key=jev_key)
-        else:
-            or_key = os.environ.get("OPENROUTER_API_KEY")
-            if or_key:
-                _decision_client = OpenRouterClient(api_key=or_key)
-    return _decision_client
 
 
 def get_aggregation_service() -> AggregationService:
@@ -57,11 +40,14 @@ class AnalyzeResponse(BaseModel):
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_images(
     files: list[UploadFile] = File(...),
-    mode: str = Form("intra"),
-    target_domain: str | None = Form(None),
 ):
-    """Analyze a set of images and return a vibe description or recommendation."""
-    logger.info("Analyzing %d images (mode=%s)", len(files), mode)
+    """Analyze a set of images and return a vibe description.
+
+    Color facet uses classical CV (k-means + perceptual color names).
+    Other facets use SigLIP2 sigmoid scoring.
+    No mode selector — always domain-agnostic.
+    """
+    logger.info("Analyzing %d images", len(files))
 
     # 1. Embed each image with SigLIP2
     embedder = get_embedding_service()
@@ -78,32 +64,19 @@ async def analyze_images(
     is_mixed = await aggregator.detect_heterogeneity(embeddings)
     logger.info("Heterogeneity detection: mixed=%s", is_mixed)
 
-    # 3. FacetFacet classification per image
-    #    Color uses classical CV (kk-means + perceptual color namesmeans + perceptual color names)
-    #    Other facets use SigLIP2 sigmoid scoring
+    # 3. Facet classification per image
     per_image_facets: list[FacetProfile] = []
     for i, f in enumerate(files):
         # Color facet via classical CV
         content = await f.read()
         await f.seek(0)
-        color_name = get_color_palette_name(io.BytesIO(content))
+        color_name = get_color_palette_name(content)
         logger.info("Image %d color: %s", i, color_name)
 
-        # Other facets via SigLIP2 (exclude color_palette from zero-shot)
-        non_color_facets = {k: v for k, v in DOMAIN_AGNOSTIC_FACETS.items() if k != "color_palette"}
+        # Other facets via SigLIP2 (color comes from classical CV, not zero-shot)
+        non_color_facets = {k: v for k, v in FACET_VOCABULARIES.items() if k != "color"}
         profile = await embedder.classify_facets(embeddings[i], non_color_facets)
-        profile.color_palette = color_name
-    for i, f in enumerate(files):
-        # Color facet via classical CV
-        content = await f.read()
-        await f.seek(0)
-        color_name = get_color_palette_name(io.BytesIO(content))
-        logger.info("Image %d color: %s", i, color_name)
-
-        # Other facets via SigLIP2 (exclude color_palette from zero-shot)
-        non_color_facets = {k: v for k, v in DOMAIN_AGNOSTIC_FACETS.items() if k != "color_palette"}
-        profile = await embedder.classify_facets(embeddings[i], non_color_facets)
-        profile.color_palette = color_name
+        profile.color = color_name
         per_image_facets.append(profile)
 
     # 4. Set-level aggregation (majority-vote)
@@ -119,26 +92,11 @@ async def analyze_images(
     confidence = sum(per_image_probs) / len(per_image_probs) if per_image_probs else 0.0
     logger.info("Mean facet confidence: %.6f", confidence)
 
-    # 6. Domain routing (cross-domain mode)
-    decision = get_decision_client()
-    if mode == "cross" and target_domain:
-        domain = target_domain
-    elif mode == "cross" and decision:
-        try:
-            domain = await decision.route_domain(aggregated.model_dump_json())
-        except Exception:
-            domain = "outfit"
-    else:
-        domain = None
+    # 6. Composition
+    phrase = aggregator.compose_phrase(aggregated)
 
-    # 7. Composition
-    if mode == "intra" or domain is None:
-        phrase = aggregator.compose_phrase(aggregated)
-    else:
-        phrase = aggregator.compose_cross_domain(aggregated, domain)
-
-    logger.info("Final result: phrase='%s', confidence=%.6f, mixed=%s, domain=%s",
-                phrase, confidence, is_mixed, domain)
+    logger.info("Final result: phrase='%s', confidence=%.6f, mixed=%s",
+                phrase, confidence, is_mixed)
 
     return AnalyzeResponse(
         vibe=VibeResult(
@@ -146,6 +104,5 @@ async def analyze_images(
             facets=aggregated,
             confidence=confidence,
             mixed=is_mixed,
-            target_domain=domain,
         )
     )
