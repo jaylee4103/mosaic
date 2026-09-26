@@ -16,6 +16,8 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | `POST /api/boards/:boardId/images` | Upload an image (`multipart/form-data`) to the private bucket |
 | `PATCH /api/boards/:boardId/images/:imageId` | Update an image's note or position |
 | `DELETE /api/boards/:boardId/images/:imageId` | Delete an image and its storage object |
+| `GET /api/boards/:boardId/vibe-profile` | Get the board's saved vibe profile |
+| `PUT /api/boards/:boardId/vibe-profile` | Save the AI service's vibe result for a board (upsert) |
 | `GET /api/demo/cart` | Show the fixed $1 + $2 two-store test cart |
 | `POST /api/demo/checkout` | Request separate Stripe Link test approvals |
 | `GET /api/demo/checkout` | Refresh approval statuses |

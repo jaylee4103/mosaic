@@ -10,9 +10,10 @@ function matches(row: FakeRow, filters: Array<[string, unknown]>): boolean {
 class FakeQueryBuilder implements PromiseLike<QueryResult> {
   private filters: Array<[string, unknown]> = []
   private orderBy: { column: string; ascending: boolean } | undefined
-  private mode: 'select' | 'insert' | 'update' | 'delete' = 'select'
+  private mode: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select'
   private payload: FakeRow | undefined
   private countOnly = false
+  private upsertConflictColumn: string | undefined
 
   constructor(private table: FakeRow[]) {}
 
@@ -37,6 +38,13 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
     return this
   }
 
+  upsert(row: FakeRow, options?: { onConflict?: string }): this {
+    this.mode = 'upsert'
+    this.payload = row
+    this.upsertConflictColumn = options?.onConflict
+    return this
+  }
+
   update(patch: FakeRow): this {
     this.mode = 'update'
     this.payload = patch
@@ -56,6 +64,20 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
     const now = new Date().toISOString()
     if (this.mode === 'insert') {
       const row: FakeRow = { id: crypto.randomUUID(), created_at: now, updated_at: now, ...this.payload }
+      this.table.push(row)
+      return { data: row, error: null }
+    }
+    if (this.mode === 'upsert') {
+      const payload = this.payload as FakeRow
+      const conflictColumn = this.upsertConflictColumn
+      const existing = conflictColumn
+        ? this.table.find((row) => row[conflictColumn] === payload[conflictColumn])
+        : undefined
+      if (existing) {
+        Object.assign(existing, payload)
+        return { data: existing, error: null }
+      }
+      const row: FakeRow = { id: crypto.randomUUID(), created_at: now, ...payload }
       this.table.push(row)
       return { data: row, error: null }
     }
