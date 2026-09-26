@@ -16,6 +16,7 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | `POST /api/boards/:boardId/images` | Upload an image (`multipart/form-data`) to the private bucket |
 | `PATCH /api/boards/:boardId/images/:imageId` | Update an image's note or position |
 | `DELETE /api/boards/:boardId/images/:imageId` | Delete an image and its storage object |
+| `POST /api/boards/:boardId/analyze` | Analyze the guest's stored private images with the ML service and save the Vibe Profile |
 | `GET /api/boards/:boardId/vibe-profile` | Get the board's saved vibe profile |
 | `PUT /api/boards/:boardId/vibe-profile` | Save the AI service's vibe result for a board (upsert) |
 | `GET /api/products/search` | Search the demo product catalog by `query`, `category`, `maxPrice` (no guest cookie needed) |
@@ -39,6 +40,8 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | `GET /api/demo/checkout/return` | Show a payment summary after a Stripe return |
 
 See `../../docs/board-commerce-api.md` for the board, image, vibe profile, product, cart, and checkout request/response contract.
+
+Set `ML_SERVICE_URL` to the `apps/ml` service origin to enable board analysis (for local development, `http://127.0.0.1:8000`). The route downloads images server-side and returns the saved Vibe Profile; the browser does not need Supabase storage access.
 
 Run `bun run seed:products` to (re-)populate the two-store demo product catalog that `/api/products/search` reads from.
 

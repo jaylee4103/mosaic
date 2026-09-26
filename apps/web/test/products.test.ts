@@ -82,6 +82,12 @@ test('searchProducts filters by a case-insensitive query substring on name', asy
   expect(products.map((p) => p.id)).toEqual(['p2'])
 })
 
+test('searchProducts retrieves candidates from a multi-word vibe query', async () => {
+  const { client } = seedCatalog()
+  const products = await searchProducts({ query: 'warm Mediterranean ceramic lamp' }, client)
+  expect(products.map((p) => p.id)).toEqual(['p1'])
+})
+
 test('searchProducts returns an empty array when nothing matches', async () => {
   const { client } = seedCatalog()
   const products = await searchProducts({ category: 'gifts' }, client)

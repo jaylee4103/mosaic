@@ -104,6 +104,42 @@ const products = [
     priceCents: 12000,
     productUrl: 'https://example.org/products/woven-jute-rug',
   },
+  {
+    merchantSlug: 'north-loom',
+    externalId: 'shirt-cream-linen',
+    name: 'Cream Linen Shirt',
+    description: 'Breathable cream linen shirt for a relaxed summer dinner.',
+    category: 'tops',
+    priceCents: 6800,
+    productUrl: 'https://example.org/products/cream-linen-shirt',
+  },
+  {
+    merchantSlug: 'north-loom',
+    externalId: 'trousers-olive-relaxed',
+    name: 'Relaxed Olive Trousers',
+    description: 'Lightweight olive trousers with a relaxed silhouette.',
+    category: 'bottoms',
+    priceCents: 7400,
+    productUrl: 'https://example.org/products/relaxed-olive-trousers',
+  },
+  {
+    merchantSlug: 'sol-and-clay',
+    externalId: 'shoes-brown-leather-loafers',
+    name: 'Brown Leather Loafers',
+    description: 'Minimal brown leather loafers for a warm, understated outfit.',
+    category: 'shoes',
+    priceCents: 9800,
+    productUrl: 'https://example.com/products/brown-leather-loafers',
+  },
+  {
+    merchantSlug: 'sol-and-clay',
+    externalId: 'watch-minimal-gold',
+    name: 'Minimal Gold Watch',
+    description: 'Simple warm gold watch with a clean face and leather strap.',
+    category: 'accessories',
+    priceCents: 6300,
+    productUrl: 'https://example.com/products/minimal-gold-watch',
+  },
 ] as const
 
 async function upsertMerchants(): Promise<Map<string, string>> {

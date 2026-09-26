@@ -169,6 +169,12 @@ function createFakeStorage(objects: Map<string, Uint8Array>) {
           for (const path of paths) objects.delete(path)
           return { data: paths.map((path) => ({ name: path })), error: null }
         },
+        async download(path: string) {
+          const bytes = objects.get(path)
+          return bytes
+            ? { data: new Blob([new Uint8Array(bytes)]), error: null }
+            : { data: null, error: { message: 'Not found' } }
+        },
         async createSignedUrls(paths: string[], expiresIn: number) {
           return {
             data: paths.map((path) => ({

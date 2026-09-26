@@ -73,6 +73,13 @@ Removes the storage object and the row. Response `200 { "ok": true }`.
 
 Backend does not define the shape of a vibe profile — it stores and returns exactly what `apps/ml`'s `VibeResult` produces (`apps/ml/app/models/vibe.py`), keys as-is (snake_case included). If AI changes that model's fields, no Backend change is required; the new fields just flow through.
 
+### `POST /api/boards/:boardId/analyze`
+Reads the current guest's private board images, sends them to `apps/ml`'s `POST /api/vibe/analyze`, and saves the returned vibe profile. Call this after the user finishes uploading or changing images. The Next server needs `ML_SERVICE_URL` set to the ML service origin (for example `http://127.0.0.1:8000`). Request body is empty. Response `200`:
+```json
+{ "vibeProfile": { "name": "Sun-Washed Mediterranean", "description": null, "profile": { "phrase": "Sun-Washed Mediterranean", "facets": {} }, "updatedAt": "..." } }
+```
+An empty board returns `400 VALIDATION`; an unreachable or invalid ML response returns `503 ML_UNAVAILABLE`. If images or notes change during analysis, the endpoint returns `409 BOARD_CHANGED` instead of saving a stale result. The ML service currently analyzes image pixels; image notes are stored on the board but are not yet part of its analysis model.
+
 ### `GET /api/boards/:boardId/vibe-profile`
 Response `200`:
 ```json
@@ -107,7 +114,7 @@ This endpoint does **not** require or set the guest cookie — the catalog isn't
 
 ### `GET /api/products/search?query=&category=&maxPrice=`
 All query params are optional.
-- `query`: case-insensitive substring match against the product name.
+- `query`: case-insensitive word matching against product name, description, and category; a generated multi-word phrase returns candidates matching the most words in the small demo catalog. This is lexical candidate retrieval, not vibe ranking.
 - `category`: case-insensitive exact match (e.g. `lighting`, `furniture`, `decor`, `textiles`).
 - `maxPrice`: in cents; excludes products priced above it.
 
