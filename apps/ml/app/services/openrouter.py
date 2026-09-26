@@ -1,25 +1,24 @@
-"""OpenRouter client — drop-in replacement for Jev typed decision layer.
+"""OpenRouter client — serves Jev (typesafe/jev-router) as the decision layer.
 
-Uses open-source models on OpenRouter for classification, scoring, and routing.
-Accepts the same text/JSON state as Jev and returns structured results.
+Uses the Jev model via OpenRouter's Chat Completions API.
+Accepts text/JSON state and returns structured results.
 """
 
 import json
 import logging
-import os
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+DEFAULT_MODEL = "typesafe/jev-router"
 
 
 class OpenRouterClient:
-    """Client for OpenRouter API — structured decision-making via open models.
+    """Client for Jev on OpenRouter — structured decision-making.
 
-    Mimics the Jev interface: accepts text/JSON state + questions,
+    Mimics the Jev interface: accepts text/JSON state,
     returns structured answers with confidence scores.
     """
 
@@ -28,18 +27,12 @@ class OpenRouterClient:
         self.model = model
         self.timeout = timeout
 
-    async def _call(
-        self,
-        state: str | dict,
-        system_prompt: str,
-        response_format: dict | None = None,
-    ) -> dict:
+    async def _call(self, state: str | dict, system_prompt: str) -> dict:
         """Make a single OpenRouter API call.
 
         Args:
             state: Text or JSON-serializable state to evaluate.
             system_prompt: System prompt defining the task.
-            response_format: Optional JSON schema for structured output.
 
         Returns:
             Parsed JSON response from the model.
@@ -58,30 +51,27 @@ class OpenRouterClient:
             "temperature": 0.1,
         }
 
-        if response_format:
-            payload["response_format"] = response_format
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    OPENROUTER_API_URL,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "http://localhost:8000",
+                    },
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                OPENROUTER_API_URL,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "http://localhost:8000",
-                },
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            return json.loads(content)
+        except (httpx.HTTPStatusError, json.JSONDecodeError, KeyError) as e:
+            logger.warning("OpenRouter call failed: %s — using fallback", e)
+            return {}
 
-        content = data["choices"][0]["message"]["content"]
-        return json.loads(content)
-
-    async def check_relevance(
-        self,
-        image_url: str,
-        content_type: str,
-    ) -> bool:
+    async def check_relevance(self, image_url: str, content_type: str) -> bool:
         """Pre-triage: is this image relevant for vibe analysis?"""
         state = json.dumps({
             "image_filename": image_url,

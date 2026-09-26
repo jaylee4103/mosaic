@@ -30,7 +30,7 @@ def get_embedding_service() -> EmbeddingService:
 def get_decision_client() -> JevClient | OpenRouterClient | None:
     global _decision_client
     if _decision_client is None:
-        # Prefer Jev, fall back to OpenRouter
+        # Prefer Jev direct API, fall back to Jev on OpenRouter
         jev_key = os.environ.get("TYPESAFE_API_KEY")
         if jev_key:
             _decision_client = JevClient(api_key=jev_key)
@@ -59,17 +59,20 @@ async def analyze_images(
     target_domain: str | None = Form(None),  # e.g., "outfit", "home_goods", "music"
 ):
     """Analyze a set of images and return a vibe description or recommendation."""
-    # 1. Pre-triage with decision layer — filter out noise images (skip if no key)
+    # 1. Pre-triage with decision layer — filter out noise images (skip if no key or on error)
     decision = get_decision_client()
     if decision:
         keep_indices: list[int] = []
         for i, f in enumerate(files):
             content = await f.read()
             await f.seek(0)
-            is_relevant = await decision.check_relevance(
-                image_url=f.filename or f"image_{i}",
-                content_type=f.content_type or "image/jpeg",
-            )
+            try:
+                is_relevant = await decision.check_relevance(
+                    image_url=f.filename or f"image_{i}",
+                    content_type=f.content_type or "image/jpeg",
+                )
+            except Exception:
+                is_relevant = True  # Keep image if decision layer fails
             if is_relevant:
                 keep_indices.append(i)
 
@@ -113,7 +116,10 @@ async def analyze_images(
     # 6. Confidence gating with decision layer
     confidence = 0.5
     if decision:
-        confidence = await decision.score_confidence(aggregated.model_dump_json())
+        try:
+            confidence = await decision.score_confidence(aggregated.model_dump_json())
+        except Exception:
+            confidence = 0.5  # Default if decision layer fails
     if confidence < 0.3:
         return AnalyzeResponse(
             vibe=VibeResult(
@@ -129,7 +135,10 @@ async def analyze_images(
     if mode == "cross" and target_domain:
         domain = target_domain
     elif mode == "cross" and decision:
-        domain = await decision.route_domain(aggregated.model_dump_json())
+        try:
+            domain = await decision.route_domain(aggregated.model_dump_json())
+        except Exception:
+            domain = "outfit"
     else:
         domain = None
 
