@@ -33,7 +33,31 @@ static_dir = Path(__file__).parent.parent / "static"
 async def serve_frontend() -> FileResponse:
     return FileResponse(static_dir / "index.html")
 
+# Serve the test frontend
+static_dir = Path(__file__).parent.parent / "static"
+
+
+@app.get("/")
+async def serve_frontend() -> FileResponse:
+    return FileResponse(static_dir / "index.html")
+
 
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/v1/models")
+async def list_models() -> dict:
+    """Return available models (OpenRouter-compatible endpoint)."""
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": "typesafe/jev-router",
+                "object": "model",
+                "created": 1700000000,
+                "owned_by": "typesafe",
+            }
+        ],
+    }
