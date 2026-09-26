@@ -1,0 +1,10 @@
+fastapi>=0.117.1
+uvicorn[standard]>=0.30.0
+transformers>=4.50.0
+torch>=2.6.0
+pillow>=11.0.0
+numpy>=2.0.0
+scikit-learn>=1.6.0
+httpx>=0.28.0
+pydantic>=2.0.0
+python-multipart>=0.0.20
