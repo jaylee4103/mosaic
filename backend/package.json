@@ -1,0 +1,12 @@
+{
+  "name": "mosaic-checkout-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@stripe/link-cli": "0.23.0"
+  }
+}
