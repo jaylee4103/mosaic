@@ -33,12 +33,15 @@ type CartItemRow = { id: string; product_id: string; quantity: number; locked: b
 async function findOrCreateCartRow(guestId: string, boardId: string, db: SupabaseClient): Promise<CartRow> {
   await assertBoardOwnership(guestId, boardId, db)
 
+  // Resume the same cart through its whole open -> checkout lifecycle (needed
+  // so a started checkout can find itself again); only 'completed'/'abandoned'
+  // carts are excluded, so a finished checkout starts a fresh cart next time.
   const { data, error } = await db
     .from('carts')
     .select('id, board_id, currency, budget_cents, status')
     .eq('board_id', boardId)
     .eq('guest_session_id', guestId)
-    .eq('status', 'open')
+    .in('status', ['open', 'checkout'])
     .maybeSingle()
   if (error) throw new Error('Could not look up cart')
   if (data) return data as CartRow
@@ -90,6 +93,10 @@ function assertValidQuantity(quantity: unknown): asserts quantity is number {
   }
 }
 
+function assertCartIsOpen(cartRow: CartRow): void {
+  if (cartRow.status !== 'open') throw validationError('Cart is locked while checkout is in progress')
+}
+
 export async function getCart(
   guestId: string,
   boardId: string,
@@ -126,6 +133,7 @@ export async function addCartItem(
   db: SupabaseClient = getSupabaseAdmin(),
 ): Promise<Cart> {
   const cartRow = await findOrCreateCartRow(guestId, boardId, db)
+  assertCartIsOpen(cartRow)
 
   if (typeof input.productId !== 'string' || input.productId.length === 0) {
     throw validationError('productId is required')
@@ -162,6 +170,7 @@ export async function updateCartItem(
   db: SupabaseClient = getSupabaseAdmin(),
 ): Promise<Cart> {
   const cartRow = await findOrCreateCartRow(guestId, boardId, db)
+  assertCartIsOpen(cartRow)
 
   const updates: Record<string, unknown> = {}
   if (input.quantity !== undefined) {
@@ -194,6 +203,7 @@ export async function removeCartItem(
   db: SupabaseClient = getSupabaseAdmin(),
 ): Promise<Cart> {
   const cartRow = await findOrCreateCartRow(guestId, boardId, db)
+  assertCartIsOpen(cartRow)
 
   const { data, error } = await db.from('cart_items').delete().eq('id', itemId).eq('cart_id', cartRow.id).select('id')
   if (error) throw new Error('Could not remove cart item')
@@ -209,6 +219,7 @@ export async function setCartBudget(
   db: SupabaseClient = getSupabaseAdmin(),
 ): Promise<Cart> {
   const cartRow = await findOrCreateCartRow(guestId, boardId, db)
+  assertCartIsOpen(cartRow)
 
   let budgetCents: number | null
   if (input.budgetCents === null) {

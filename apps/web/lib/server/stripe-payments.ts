@@ -88,10 +88,11 @@ export function createStripePaymentStores({
   }
 
   return {
-    async verifyDistinctAccounts() {
-      const ids = await Promise.all(merchants.map(({ id }) => accountFor(id).then(({ accountId }) => accountId)))
-      if (new Set(ids).size !== ids.length) throw new Error('Store A and Store B must use distinct Stripe accounts')
+    async verifyDistinctAccounts(merchantIds: string[] = merchants.map(({ id }) => id)) {
+      const ids = await Promise.all(merchantIds.map((id) => accountFor(id).then(({ accountId }) => accountId)))
+      if (new Set(ids).size !== ids.length) throw new Error('Merchants must use distinct Stripe accounts')
     },
+    accountFor,
     async createSession(input: {
       checkoutId: string
       cartId: string
@@ -101,14 +102,16 @@ export function createStripePaymentStores({
       currency: string
       approvalId: string
       baseUrl: string
+      returnPath?: string
+      retryOf?: string
     }): Promise<DemoPayment> {
-      const { checkoutId, cartId, merchantId, items, amount, currency, approvalId, baseUrl } = input
+      const { checkoutId, cartId, merchantId, items, amount, currency, approvalId, baseUrl, returnPath = '/api/demo/checkout/return' } = input
       const { key, accountId } = await accountFor(merchantId)
       const params = new URLSearchParams({
         mode: 'payment',
         client_reference_id: checkoutId,
-        success_url: `${baseUrl}/api/demo/checkout/return?merchant=${merchantId}&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/api/demo/checkout/return?merchant=${merchantId}&canceled=1`,
+        success_url: `${baseUrl}${returnPath}?merchant=${merchantId}&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}${returnPath}?merchant=${merchantId}&canceled=1`,
         'metadata[mosaic_checkout_id]': checkoutId,
         'metadata[mosaic_cart_id]': cartId,
         'metadata[mosaic_merchant_id]': merchantId,
@@ -126,7 +129,7 @@ export function createStripePaymentStores({
       })
       const session = await request(key, 'checkout/sessions', {
         params,
-        idempotencyKey: `mosaic:${checkoutId}:${merchantId}:checkout`,
+        idempotencyKey: `mosaic:${checkoutId}:${merchantId}:checkout:${input.retryOf ?? 'initial'}`,
       }) as StripeCheckoutSession
       if (session.livemode !== false || !session.id?.startsWith('cs_test_') ||
         session.amount_total !== amount || session.currency !== currency ||
@@ -148,7 +151,7 @@ export function createStripePaymentStores({
         throw new Error(`Stripe Checkout Session does not match ${payment.merchantId}`)
       }
       if (session.status !== 'complete' || session.payment_status !== 'paid' || !session.payment_intent) {
-        return { ...payment, status: session.status ?? 'unknown', paymentStatus: session.payment_status ?? 'unknown', verified: false }
+        return { ...payment, url: session.url ?? payment.url, status: session.status ?? 'unknown', paymentStatus: session.payment_status ?? 'unknown', verified: false }
       }
       const intentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent.id
       if (!intentId) throw new Error(`Stripe PaymentIntent missing for ${payment.merchantId}`)

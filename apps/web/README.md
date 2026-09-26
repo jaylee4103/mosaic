@@ -25,6 +25,11 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | `PATCH /api/boards/:boardId/cart/items/:itemId` | Change a cart item's quantity or locked state |
 | `DELETE /api/boards/:boardId/cart/items/:itemId` | Remove an item from the cart |
 | `POST /api/boards/:boardId/cart/actions` | Apply a batch of AI-proposed cart actions (`ADD`/`REMOVE`/`REPLACE`/`LOCK`/`UNLOCK`/`SET_BUDGET`) |
+| `POST /api/boards/:boardId/checkout` | Snapshot the real cart into merchant orders and start checkout |
+| `GET /api/boards/:boardId/checkout` | Read the latest checkout and refresh local Link approvals when enabled |
+| `POST /api/boards/:boardId/checkout/payments` | Create one hosted Stripe test Checkout Session per unpaid merchant |
+| `GET /api/boards/:boardId/checkout/payments` | Verify each merchant payment and update order state |
+| `GET /api/boards/:boardId/checkout/return` | Show the payment result after a hosted Stripe return |
 | `GET /api/demo/cart` | Show the fixed $1 + $2 two-store test cart |
 | `POST /api/demo/checkout` | Request separate Stripe Link test approvals |
 | `GET /api/demo/checkout` | Refresh approval statuses |
@@ -33,7 +38,7 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | `GET /api/demo/checkout/payments` | Verify payment status and payment method with each test merchant |
 | `GET /api/demo/checkout/return` | Show a payment summary after a Stripe return |
 
-See `../../docs/board-commerce-api.md` for the full board, image, vibe profile, product, and cart request/response contract.
+See `../../docs/board-commerce-api.md` for the board, image, vibe profile, product, cart, and checkout request/response contract.
 
 Run `bun run seed:products` to (re-)populate the two-store demo product catalog that `/api/products/search` reads from.
 
@@ -41,8 +46,14 @@ Guest sessions and demo checkout state are stored in Supabase, so separate Next.
 
 ## Local Link demo
 
-The Link approval step currently depends on an interactive, authenticated `@stripe/link-cli` installed on the machine running Next. Run `bunx link-cli auth login` yourself and set `LINK_CLI_ENABLED=true` **only for local `bun dev`**. The Next Route Handler invokes that local CLI in test mode. It never retrieves payment credentials. Next deployment on Vercel cannot use this machine's authenticated CLI session; the approval routes return `501` in production. A deployed agent-wallet flow needs a supported server API and deployment credentials for Link.
+The optional Link agent-wallet approval step depends on an interactive, authenticated `@stripe/link-cli` installed on the machine running Next. Run `bunx link-cli auth login` yourself and set `LINK_CLI_ENABLED=true` **only for local `bun dev`**. The Next Route Handler invokes that local CLI in test mode. It never retrieves payment credentials. Next deployment on Vercel cannot use this machine's authenticated CLI session; the fixed `/api/demo/checkout` approval routes return `501` in production. The real-cart board checkout uses hosted Stripe Checkout instead when the CLI is unavailable. A deployed agent-wallet flow still needs a supported server API and deployment credentials for Link.
 
 The test purchase step needs `STRIPE_STORE_A_TEST_SECRET_KEY` and `STRIPE_STORE_B_TEST_SECRET_KEY` from two distinct Stripe test merchant accounts. They must remain server-only. The customer opens each hosted Stripe Checkout URL and completes each test purchase there. Link approvals alone do not charge either store. `POST /api/demo/checkout/complete` only creates local-style simulated receipts with `paymentStatus: not_charged`.
+
+## Real-cart sandbox checkout
+
+The board checkout routes use the saved cart and its product price snapshot. By default they create separate hosted Stripe Checkout Sessions for the two seeded merchants, so deployment does not need the local Link CLI. The customer still confirms each merchant purchase on Stripe. Set `LINK_CLI_ENABLED=true` during local development to request the extra agent-wallet approval step before payment; this path remains local-only. A deployable Link agent-wallet approval flow requires a supported server API and credentials. These routes are sandbox checkout, not physical retailer order placement or a one-charge multi-store purchase.
+
+For a new database, apply `202609260003_checkout_payment_method.sql` before running the board checkout routes. It records the actual Stripe payment method and whether Link was verified. A paid card transaction is reported as paid with `linkVerified: false`.
 
 This is a two-store test fixture. Product search, merchant catalog ingestion, real retailer order placement, fulfillment, and a single charge covering unrelated stores still require separate integrations. The current UI is not wired to these endpoints.
