@@ -1,6 +1,6 @@
 # Board and commerce API contract
 
-This is the contract for Backend's endpoints under `apps/web/app/api/`. It is the source of truth for Frontend and AI while they integrate. Boards, board images, and the vibe profile are implemented today; products and cart are shape-only until later milestones.
+This is the contract for Backend's endpoints under `apps/web/app/api/`. It is the source of truth for Frontend and AI while they integrate. Boards, board images, the vibe profile, and product search are implemented today; cart is shape-only until a later milestone.
 
 ## Conventions
 
@@ -99,21 +99,31 @@ Request body: **exactly the `vibe` object from `apps/ml`'s `POST /api/vibe/analy
 
 Backend only reads two fields out of the body for the `name`/`description` columns already required by the schema: `phrase` → `name` (empty string if absent), `message` → `description` (`null` if absent). Everything else — including `facets` — is stored verbatim in `profile` and is not validated or reshaped.
 
-## Products (shape only — not yet implemented)
+## Products
+
+This is the `searchProducts(query, category, maxPrice)` interface from the root README's "Product discovery" section, provider-agnostic by design: today it queries a seeded two-store demo catalog (`apps/web/scripts/seed-products.ts`), but the response shape is meant to stay stable if the underlying provider changes later (a real merchant feed, marketplace API, etc.).
+
+This endpoint does **not** require or set the guest cookie — the catalog isn't guest-scoped, so it's a plain unauthenticated read.
 
 ### `GET /api/products/search?query=&category=&maxPrice=`
+All query params are optional.
+- `query`: case-insensitive substring match against the product name.
+- `category`: case-insensitive exact match (e.g. `lighting`, `furniture`, `decor`, `textiles`).
+- `maxPrice`: in cents; excludes products priced above it.
+
+Only `available: true` products are returned. Response `200`:
 ```json
 {
   "products": [
     {
-      "id": "...", "merchantId": "...", "merchantName": "...",
+      "id": "...", "merchantId": "...", "merchantName": "Sol & Clay",
       "name": "Ceramic Bedside Lamp", "description": "...", "category": "lighting",
-      "priceCents": 5500, "currency": "usd", "imageUrl": "...", "productUrl": "...", "available": true
+      "priceCents": 5500, "currency": "usd", "imageUrl": null, "productUrl": "...", "available": true
     }
   ]
 }
 ```
-`maxPrice` is in cents. AI owns query generation and vibe-based ranking on top of these results.
+AI owns query generation and vibe-based ranking on top of these results.
 
 ## Cart (shape only — not yet implemented)
 
