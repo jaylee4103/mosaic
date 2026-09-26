@@ -6,14 +6,14 @@ import os
 from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
-
 from app.models.facets import FACET_VOCABULARIES, FacetProfile
 from app.models.vibe import VibeResult
 from app.services.aggregation import AggregationService
 from app.services.embedding import EmbeddingService
 from app.services.jev import JevClient
 from app.services.openrouter import OpenRouterClient
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -33,7 +33,6 @@ def get_embedding_service() -> EmbeddingService:
 def get_decision_client() -> JevClient | OpenRouterClient | None:
     global _decision_client
     if _decision_client is None:
-        # Prefer Jev direct API, fall back to Jev on OpenRouter
         jev_key = os.environ.get("TYPESAFE_API_KEY")
         if jev_key:
             _decision_client = JevClient(api_key=jev_key)
@@ -58,18 +57,16 @@ class AnalyzeResponse(BaseModel):
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_images(
     files: list[UploadFile] = File(...),
-    mode: str = Form("intra"),  # "intra" or "cross"
-    target_domain: str | None = Form(None),  # e.g., "outfit", "home_goods", "music"
+    mode: str = Form("intra"),
+    target_domain: str | None = Form(None),
 ):
     """Analyze a set of images and return a vibe description or recommendation."""
     logger.info("Analyzing %d images (mode=%s)", len(files), mode)
 
-    # 1. Pre-triage with decision layer — filter out noise images (skip if no key or on error)
+    # 1. Pre-triage with decision layer
     decision = get_decision_client()
     if decision:
         logger.info("Decision client available — running pre-triage")
-    else:
-        logger.info("No decision client — skipping pre-triage")
         keep_indices: list[int] = []
         for i, f in enumerate(files):
             content = await f.read()
@@ -80,7 +77,7 @@ async def analyze_images(
                     content_type=f.content_type or "image/jpeg",
                 )
             except Exception:
-                is_relevant = True  # Keep image if decision layer fails
+                is_relevant = True
             if is_relevant:
                 keep_indices.append(i)
 
@@ -97,6 +94,7 @@ async def analyze_images(
 
         kept_files = [files[i] for i in keep_indices]
     else:
+        logger.info("No decision client — skipping pre-triage")
         kept_files = files
 
     # 2. Embed each image with SigLIP2
@@ -110,7 +108,7 @@ async def analyze_images(
         embeddings.append(embedding)
     logger.info("Generated %d embeddings (dim=%d)", len(embeddings), len(embeddings[0]) if embeddings else 0)
 
-    # 3. Heterogeneity detection — single vibe or mixed set?
+    # 3. Heterogeneity detection
     aggregator = get_aggregation_service()
     is_mixed = await aggregator.detect_heterogeneity(embeddings)
     logger.info("Heterogeneity detection: mixed=%s", is_mixed)
@@ -127,31 +125,14 @@ async def analyze_images(
     logger.info("Aggregated facets: %s", aggregated.surviving_facets())
     logger.info("Facet confidences: %s", aggregated.confidence)
 
-    # 6. Confidence gating with decision layer
+    # 6. Confidence gating
     confidence = 0.5
     if decision:
         try:
             confidence = await decision.score_confidence(aggregated.model_dump_json())
             logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
-                    logger.info("Decision layer confidence: %.3f", confidence)
         except Exception as e:
-            confidence = 0.5  # Default if decision layer fails
+            confidence = 0.5
             logger.warning("Decision layer failed, using default confidence: %s", e)
     if confidence < 0.3:
         return AnalyzeResponse(
