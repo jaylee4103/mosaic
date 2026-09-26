@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.models.facets import DOMAIN_AGNOSTIC_FACETS, FacetProfile
 from app.models.vibe import VibeResult
 from app.services.aggregation import AggregationService
+from app.services.color import get_color_palette_name
 from app.services.embedding import EmbeddingService
 from app.services.jev import JevClient
 from app.services.openrouter import OpenRouterClient
@@ -77,11 +78,32 @@ async def analyze_images(
     is_mixed = await aggregator.detect_heterogeneity(embeddings)
     logger.info("Heterogeneity detection: mixed=%s", is_mixed)
 
-    # 3. Zero-shot facet classification per image (domain-agnostic)
+    # 3. FacetFacet classification per image
+    #    Color uses classical CV (kk-means + perceptual color namesmeans + perceptual color names)
+    #    Other facets use SigLIP2 sigmoid scoring
     per_image_facets: list[FacetProfile] = []
-    for i, emb in enumerate(embeddings):
-        profile = await embedder.classify_facets(emb, DOMAIN_AGNOSTIC_FACETS)
-        logger.info("Image %d facets: %s", i, profile.surviving_facets())
+    for i, f in enumerate(files):
+        # Color facet via classical CV
+        content = await f.read()
+        await f.seek(0)
+        color_name = get_color_palette_name(io.BytesIO(content))
+        logger.info("Image %d color: %s", i, color_name)
+
+        # Other facets via SigLIP2 (exclude color_palette from zero-shot)
+        non_color_facets = {k: v for k, v in DOMAIN_AGNOSTIC_FACETS.items() if k != "color_palette"}
+        profile = await embedder.classify_facets(embeddings[i], non_color_facets)
+        profile.color_palette = color_name
+    for i, f in enumerate(files):
+        # Color facet via classical CV
+        content = await f.read()
+        await f.seek(0)
+        color_name = get_color_palette_name(io.BytesIO(content))
+        logger.info("Image %d color: %s", i, color_name)
+
+        # Other facets via SigLIP2 (exclude color_palette from zero-shot)
+        non_color_facets = {k: v for k, v in DOMAIN_AGNOSTIC_FACETS.items() if k != "color_palette"}
+        profile = await embedder.classify_facets(embeddings[i], non_color_facets)
+        profile.color_palette = color_name
         per_image_facets.append(profile)
 
     # 4. Set-level aggregation (majority-vote)
