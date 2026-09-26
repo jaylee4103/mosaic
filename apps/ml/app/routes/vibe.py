@@ -62,69 +62,34 @@ async def analyze_images(
     """Analyze a set of images and return a vibe description or recommendation."""
     logger.info("Analyzing %d images (mode=%s)", len(files), mode)
 
-    # 1. Pre-triage with decision layer
-    decision = get_decision_client()
-    if decision:
-        logger.info("Decision client available — running pre-triage")
-        keep_indices: list[int] = []
-        for i, f in enumerate(files):
-            content = await f.read()
-            await f.seek(0)
-            try:
-                is_relevant = await decision.check_relevance(
-                    image_url=f.filename or f"image_{i}",
-                    content_type=f.content_type or "image/jpeg",
-                )
-            except Exception:
-                is_relevant = True
-            if is_relevant:
-                keep_indices.append(i)
-
-        if not keep_indices:
-            return AnalyzeResponse(
-                vibe=VibeResult(
-                    phrase="",
-                    facets=FacetProfile(),
-                    confidence=0.0,
-                    mixed=False,
-                    message="No relevant images found in the upload set.",
-                )
-            )
-
-        kept_files = [files[i] for i in keep_indices]
-    else:
-        logger.info("No decision client — skipping pre-triage")
-        kept_files = files
-
-    # 2. Embed each image with SigLIP2
-    logger.info("Embedding %d images with SigLIP2", len(kept_files))
+    # 1. Embed each image with SigLIP2
     embedder = get_embedding_service()
     embeddings: list[list[float]] = []
-    for f in kept_files:
+    for f in files:
         content = await f.read()
         await f.seek(0)
         embedding = await embedder.embed_image(content)
         embeddings.append(embedding)
     logger.info("Generated %d embeddings (dim=%d)", len(embeddings), len(embeddings[0]) if embeddings else 0)
 
-    # 3. Heterogeneity detection
+    # 2. Heterogeneity detection
     aggregator = get_aggregation_service()
     is_mixed = await aggregator.detect_heterogeneity(embeddings)
     logger.info("Heterogeneity detection: mixed=%s", is_mixed)
 
-    # 4. Zero-shot facet classification per image
+    # 3. Zero-shot facet classification per image
     per_image_facets: list[FacetProfile] = []
     for i, emb in enumerate(embeddings):
         profile = await embedder.classify_facets(emb, FACET_VOCABULARIES)
         logger.info("Image %d facets: %s", i, profile.surviving_facets())
         per_image_facets.append(profile)
 
-    # 5. Set-level aggregation (majority-vote)
+    # 4. Set-level aggregation (majority-vote)
     aggregated = await aggregator.aggregate(per_image_facets)
     logger.info("Aggregated facets: %s", aggregated.surviving_facets())
     logger.info("Facet confidences: %s", aggregated.confidence)
 
-    # 6. Confidence gating — use mean facet confidence from embedding service
+    # 5. Confidence gating
     facet_confs = [v for v in aggregated.confidence.values() if v > 0]
     confidence = sum(facet_confs) / len(facet_confs) if facet_confs else 0.0
     logger.info("Mean facet confidence: %.3f", confidence)
@@ -139,7 +104,8 @@ async def analyze_images(
             )
         )
 
-    # 7. Domain routing (cross-domain mode)
+    # 6. Domain routing (cross-domain mode)
+    decision = get_decision_client()
     if mode == "cross" and target_domain:
         domain = target_domain
     elif mode == "cross" and decision:
@@ -150,7 +116,7 @@ async def analyze_images(
     else:
         domain = None
 
-    # 8. Composition
+    # 7. Composition
     if mode == "intra" or domain is None:
         phrase = aggregator.compose_phrase(aggregated)
     else:
