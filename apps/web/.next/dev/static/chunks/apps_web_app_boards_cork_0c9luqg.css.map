@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 1, "column": 0}, "map": {"version":3,"sources":["file:///Users/sherryli/mosaic/apps/web/app/boards/cork.css"],"sourcesContent":[".cork-texture {\n  background-color: #c69a6d;\n  background-image:\n    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),\n    radial-gradient(rgba(83, 52, 31, 0.18) 1px, transparent 1px),\n    repeating-linear-gradient(\n      45deg,\n      rgba(255, 255, 255, 0.035) 0px,\n      rgba(255, 255, 255, 0.035) 1px,\n      transparent 1px,\n      transparent 4px\n    ),\n    repeating-linear-gradient(\n      -45deg,\n      rgba(83, 52, 31, 0.05) 0px,\n      rgba(83, 52, 31, 0.05) 1px,\n      transparent 1px,\n      transparent 4px\n    );\n  background-size: 9px 9px, 9px 9px, 8px 8px, 8px 8px;\n  background-position: 0 0, 4px 4px, 0 0, 0 0;\n  box-shadow:\n    inset 0 0 0 1px rgba(0, 0, 0, 0.05),\n    inset 0 40px 80px -40px rgba(0, 0, 0, 0.35),\n    inset 0 -40px 80px -40px rgba(0, 0, 0, 0.25);\n}\n"],"names":[],"mappings":"AAAA"}}]
+}

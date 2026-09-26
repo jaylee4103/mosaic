@@ -1,0 +1,3 @@
+{
+  "/boards/[boardId]/page": "app/boards/[boardId]/page.js"
+}

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 10, "column": 0}, "map": {"version":3,"sources":["file:///Users/sherryli/mosaic/apps/web/app/boards/page.tsx"],"sourcesContent":["export default function BoardsIndexPage() {\n  // Intentionally empty: <BulletinBoard /> renders from app/boards/layout.tsx\n  // so it can stay mounted while /boards/[boardId] overlays the zoomed detail.\n  return null;\n}\n"],"names":["BoardsIndexPage"],"mappings":";;;;AAAe,SAASA;IACtB,4EAA4E;IAC5E,6EAA6E;IAC7E,OAAO;AACT"}},
+    {"offset": {"line": 30, "column": 0}, "map": {"version":3,"sources":["file:///Users/sherryli/mosaic/apps/web/app/favicon.ico.mjs%20(structured%20image%20object)"],"sourcesContent":["import src from \"IMAGE\";\nexport default { src, width: 256, height: 256 }\n"],"names":["src","width","height"],"mappings":";;;;AAAA;;uCACe;IAAEA,KAAAA,kJAAG;IAAEC,OAAO;IAAKC,QAAQ;AAAI"}}]
+}

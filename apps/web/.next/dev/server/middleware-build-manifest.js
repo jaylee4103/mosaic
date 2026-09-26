@@ -37,7 +37,7 @@ globalThis.__BUILD_MANIFEST = {
       "static/chunks/turbopack-apps_web_07dw05d._.js",
       "static/chunks/apps_web_219uq1s._.js"
     ],
-    "/_not-found/page": [
+    "/boards/page": [
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_0slksx-._.js",
       "static/chunks/0rrk_next_dist_compiled_next-devtools_index_0ef5mgu.js",
       "static/chunks/0rrk_next_dist_compiled_react-dom_1l10ayg._.js",
@@ -48,7 +48,7 @@ globalThis.__BUILD_MANIFEST = {
       "static/chunks/0rrk_@swc_helpers_cjs_0obc4__._.js",
       "static/chunks/apps_web_1anvha4._.js",
       "static/chunks/turbopack-apps_web_07dw05d._.js",
-      "static/chunks/apps_web_18x7jxu._.js"
+      "static/chunks/apps_web_1gvqxq0._.js"
     ]
   },
   "pagesChunkGroupBootstrapParams": {},
