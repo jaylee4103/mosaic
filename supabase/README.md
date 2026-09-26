@@ -15,6 +15,6 @@ The `mosaic-board-images` bucket is present in that project. It is private, has 
 
 Mosaic has no sign-in screen. A guest receives a random 256-bit token in an HttpOnly, SameSite=Lax cookie for 30 days. Only its SHA-256 hash is stored in `guest_sessions`; production cookies are also Secure. A missing or expired token creates a new session.
 
-All tables use row level security and deny direct browser-role access. The server secret key bypasses row level security, so every API route must resolve the guest cookie and scope its checkout query to that guest. The private image bucket should use paths such as `<guest-id>/<board-id>/<image-id>` and short-lived signed URLs after checking board ownership.
+All tables use row level security and deny direct browser-role access. The server secret key bypasses row level security, so every API route must resolve the guest cookie and scope its checkout query to that guest. The board image upload handlers (`apps/web/lib/server/board-images.ts`) write to `<guest-id>/<board-id>/<image-id>` paths and return short-lived (1 hour) signed URLs after checking board ownership; see `../docs/board-commerce-api.md` for the full board and image API contract.
 
 The durable `demo_checkout_sessions` table is for the fixed two-store test fixture. It does not replace the catalog, cart, or order tables needed for the full Mosaic product.
