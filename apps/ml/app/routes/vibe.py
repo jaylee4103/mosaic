@@ -87,26 +87,15 @@ async def analyze_images(
     # 4. Set-level aggregation (majority-vote)
     aggregated = await aggregator.aggregate(per_image_facets)
     logger.info("Aggregated facets: %s", aggregated.surviving_facets())
-    logger.info("Facet confidences: %s", aggregated.confidence)
 
-    # 5. Confidence gating — use mean softmax probability from embedding
+    # 5. Confidence — mean sigmoid probability (naturally small due to logit_bias)
     per_image_probs = []
     for profile in per_image_facets:
         confs = [v for v in profile.confidence.values() if v > 0]
         if confs:
             per_image_probs.append(sum(confs) / len(confs))
     confidence = sum(per_image_probs) / len(per_image_probs) if per_image_probs else 0.0
-    logger.info("Mean facet confidence: %.3f", confidence)
-    if confidence < 0.05:
-        return AnalyzeResponse(
-            vibe=VibeResult(
-                phrase="",
-                facets=aggregated,
-                confidence=confidence,
-                mixed=is_mixed,
-                message="Low confidence — try uploading more cohesive images.",
-            )
-        )
+    logger.info("Mean facet confidence: %.6f", confidence)
 
     # 6. Domain routing (cross-domain mode)
     decision = get_decision_client()
@@ -126,7 +115,7 @@ async def analyze_images(
     else:
         phrase = aggregator.compose_cross_domain(aggregated, domain)
 
-    logger.info("Final result: phrase='%s', confidence=%.3f, mixed=%s, domain=%s",
+    logger.info("Final result: phrase='%s', confidence=%.6f, mixed=%s, domain=%s",
                 phrase, confidence, is_mixed, domain)
 
     return AnalyzeResponse(
