@@ -17,11 +17,11 @@ Mosaic combines multimodal AI, product discovery, an editable AI-managed cart, a
 
 ## Current implementation and verified progress
 
-The repository currently contains a Next.js 16 frontend scaffold in `apps/web/`, an early FastAPI vibe detection service in `apps/ml/`, and a standalone checkout test backend in [`backend/`](backend/README.md). The design and architecture sections below describe the intended product; the mood board UI, shopping agent, production order routing, and frontend checkout integration are not implemented yet.
+The repository currently contains a Next.js 16 frontend and API in [`apps/web/`](apps/web/README.md), an early FastAPI vibe detection service in `apps/ml/`, and a Supabase schema in [`supabase/`](supabase/README.md). The design and architecture sections below describe the intended product; the mood board UI, shopping agent, production order routing, and frontend checkout integration are not implemented yet.
 
 **Completed on September 26, 2026:** One demo Mosaic cart was split into two merchant totals and paid through two distinct Stripe **sandbox** merchant accounts using Link. Store A's Ceramic Demo Lamp was **$1.00** and Store B's Terracotta Demo Vase was **$2.00**. Both Stripe Checkout Sessions finished with `payment_status: paid`; their PaymentIntents succeeded for the exact amounts, and both PaymentMethods had `type: link`. Stripe reported `livemode: false` throughout, so no real funds moved. The buyer made the final purchase decisions on Stripe's hosted pages without a Mosaic sign-in.
 
-This proves the two-merchant **test payment flow**, not physical fulfillment or a production unified checkout. The backend's older local `not_charged` receipts are simulated and are not counted as payment evidence. The two hosted Stripe pages still require a separate customer confirmation for each merchant. Details, API endpoints, setup, and the verified test identifiers are in the [backend README](backend/README.md). Run `npm test` in `backend/` to check the nine backend tests.
+This [prior run](docs/checkout-sandbox-verification.md) proves the two-merchant **test payment flow**, not physical fulfillment or a production unified checkout. Local `not_charged` receipts are simulated and are not payment evidence. The two hosted Stripe pages require a separate customer confirmation for each merchant. The backend routes are now TypeScript Next Route Handlers with guest and demo checkout state in Supabase; the payment flow has not yet been repeated through the Next port. Setup and current limits are in the [Next API README](apps/web/README.md). Run `bun test` in `apps/web/` for the port's tests.
 
 ## Why Mosaic
 
@@ -778,7 +778,7 @@ flowchart TB
 
 ### Payments
 
-- Stripe Link sandbox checkout in the standalone backend (implemented and verified)
+- Stripe Link sandbox checkout in Next Route Handlers (local CLI path; prior standalone run verified)
 - Frontend checkout integration and production seller onboarding (planned)
 - The PayPal flow shown in the product diagrams is a design proposal, not implemented code
 

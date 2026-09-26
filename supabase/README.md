@@ -1,24 +1,20 @@
 # Mosaic Supabase setup
 
-The migration in `migrations/202609260001_core.sql` creates the guest, board, image, Vibe Profile, merchant, product, cart, checkout, and order tables.
+`migrations/202609260001_core.sql` creates guest, board, image, Vibe Profile, merchant, product, cart, checkout, and order tables. `migrations/202609260002_demo_checkout_state.sql` adds durable state for the two-store Next.js demo checkout.
 
-The schema was applied through the SQL Editor to the `mosaic` project (`qptyjlfydloegovtfhkb`) on September 26, 2026. All 11 tables were verified with row level security enabled and no `anon` or `authenticated` table access. The SQL Editor does not record this as a CLI migration, so do not rerun this initial migration against that project.
+Both migrations were applied through the SQL Editor to the `mosaic` project (`qptyjlfydloegovtfhkb`) on September 26, 2026. All 12 tables were verified with row level security enabled and no `anon` or `authenticated` table access. The SQL Editor does not record CLI migration history, so do not rerun either migration against this project.
 
 The `mosaic-board-images` bucket is present in that project. It is private, has a 10 MB file limit, and accepts JPEG, PNG, and WebP.
 
-## Apply to a Supabase project
+## Set up another project
 
-1. Create a Supabase project and run `migrations/202609260001_core.sql` in its SQL Editor.
-2. Copy `backend/.env.example` to `backend/.env`. Set `SUPABASE_URL` and a **secret** API key from the project settings. Keep this key on the backend; do not use a `NEXT_PUBLIC_` variable.
-3. From `backend/`, run `node --env-file=.env scripts/setup-storage.mjs`. This creates a private `mosaic-board-images` bucket restricted to JPEG, PNG, and WebP files up to 10 MB.
-4. Start the backend with `node --env-file=.env src/server.mjs`. `GET /api/guest` creates or resumes a guest session and sets its cookie.
+1. Apply both SQL files in filename order in the project's SQL Editor.
+2. In Supabase Storage, create a private bucket named `mosaic-board-images`; restrict it to 10 MB JPEG, PNG, and WebP files.
+3. Copy `apps/web/.env.example` to `apps/web/.env.local` and set the project URL and a **secret** API key. Keep the key on the Next.js server; never use a `NEXT_PUBLIC_` variable for it.
+4. Start Next.js from `apps/web/`. `GET /api/guest` creates or resumes a guest session, and the demo checkout routes persist state in `demo_checkout_sessions`.
 
-## Guest sessions
+Mosaic has no sign-in screen. A guest receives a random 256-bit token in an HttpOnly, SameSite=Lax cookie for 30 days. Only its SHA-256 hash is stored in `guest_sessions`; production cookies are also Secure. A missing or expired token creates a new session.
 
-Mosaic has no sign-in screen. On the first request, the backend creates a random 256-bit token and puts it in an HttpOnly, SameSite=Lax cookie for 30 days. Only its SHA-256 hash is stored in `guest_sessions`. In production the cookie is also Secure. A missing or expired token creates a new guest session.
+All tables use row level security and deny direct browser-role access. The server secret key bypasses row level security, so every API route must resolve the guest cookie and scope its checkout query to that guest. The private image bucket should use paths such as `<guest-id>/<board-id>/<image-id>` and short-lived signed URLs after checking board ownership.
 
-Board, cart, and checkout rows carry a `guest_session_id`; future API handlers must resolve the cookie and filter every query by that ID. The migration enables row level security and removes browser-role access to these tables. Only the backend secret key can read or write them. The backend must perform the ownership checks because that key bypasses row level security.
-
-The image bucket is private. Future upload handlers should write paths such as `<guest-id>/<board-id>/<image-id>` and return short-lived signed URLs after checking board ownership. Do not expose the secret key or raw storage paths as public image URLs.
-
-The current two-store checkout demo still saves its test session in `backend/.local`; moving it to the new checkout and order tables is the next integration step.
+The durable `demo_checkout_sessions` table is for the fixed two-store test fixture. It does not replace the catalog, cart, or order tables needed for the full Mosaic product.
