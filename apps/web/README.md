@@ -19,6 +19,11 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | `GET /api/boards/:boardId/vibe-profile` | Get the board's saved vibe profile |
 | `PUT /api/boards/:boardId/vibe-profile` | Save the AI service's vibe result for a board (upsert) |
 | `GET /api/products/search` | Search the demo product catalog by `query`, `category`, `maxPrice` (no guest cookie needed) |
+| `GET /api/boards/:boardId/cart` | Get (or create) the board's cart, with live catalog pricing |
+| `PATCH /api/boards/:boardId/cart` | Set or clear the cart's budget |
+| `POST /api/boards/:boardId/cart/items` | Add a product to the cart |
+| `PATCH /api/boards/:boardId/cart/items/:itemId` | Change a cart item's quantity or locked state |
+| `DELETE /api/boards/:boardId/cart/items/:itemId` | Remove an item from the cart |
 | `GET /api/demo/cart` | Show the fixed $1 + $2 two-store test cart |
 | `POST /api/demo/checkout` | Request separate Stripe Link test approvals |
 | `GET /api/demo/checkout` | Refresh approval statuses |

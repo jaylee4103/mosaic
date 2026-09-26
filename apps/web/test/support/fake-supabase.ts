@@ -191,6 +191,8 @@ export function createFakeSupabase(seed: Record<string, FakeRow[]> = {}) {
     vibe_profiles: seed.vibe_profiles ?? [],
     merchants: seed.merchants ?? [],
     products: seed.products ?? [],
+    carts: seed.carts ?? [],
+    cart_items: seed.cart_items ?? [],
   }
   const objects = new Map<string, Uint8Array>()
 

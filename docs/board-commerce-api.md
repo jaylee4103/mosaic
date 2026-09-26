@@ -1,6 +1,6 @@
 # Board and commerce API contract
 
-This is the contract for Backend's endpoints under `apps/web/app/api/`. It is the source of truth for Frontend and AI while they integrate. Boards, board images, the vibe profile, and product search are implemented today; cart is shape-only until a later milestone.
+This is the contract for Backend's endpoints under `apps/web/app/api/`. It is the source of truth for Frontend and AI while they integrate. Boards, board images, the vibe profile, product search, and the cart are implemented today.
 
 ## Conventions
 
@@ -125,25 +125,34 @@ Only `available: true` products are returned. Response `200`:
 ```
 AI owns query generation and vibe-based ranking on top of these results.
 
-## Cart (shape only — not yet implemented)
+## Cart
 
-### `GET /api/cart?boardId=`
+Each board has exactly one open cart, created automatically on first access — there's no separate "create cart" call. Item prices are **always resolved from the live `products` catalog**, never from the client or a cached value, so totals reflect the current catalog even if a price changes after an item was added. Every mutation endpoint returns the full, freshly recomputed cart (not just the changed item), so the client always has up-to-date totals.
+
+### `GET /api/boards/:boardId/cart`
+Gets (creating if needed) the board's cart. Response `200`:
 ```json
 {
-  "id": "...", "boardId": "...", "budgetCents": 30000, "currency": "usd", "status": "open",
-  "items": [{ "id": "...", "productId": "...", "quantity": 1, "locked": false, "subtotalCents": 5500 }],
+  "id": "...", "boardId": "...", "currency": "usd", "budgetCents": 30000, "status": "open",
+  "items": [
+    {
+      "id": "...", "productId": "...", "quantity": 1, "locked": false, "subtotalCents": 5500,
+      "product": { "id": "...", "merchantId": "...", "merchantName": "Sol & Clay", "name": "Ceramic Bedside Lamp", "priceCents": 5500, "currency": "usd", "available": true, "...": "..." }
+    }
+  ],
   "totalCents": 5500, "remainingCents": 24500
 }
 ```
+`budgetCents` and `remainingCents` (`budgetCents - totalCents`) are `null` until a budget is set. `product` is `null` if the product was later removed from the catalog entirely (rare; an unavailable-but-still-listed product still resolves normally).
 
-### `POST /api/cart/items`
-Request: `{ "boardId": "...", "productId": "...", "quantity": 1 }`. Server validates the product and price against the catalog.
+### `PATCH /api/boards/:boardId/cart`
+Request: `{ "budgetCents": 25000 }` (or `{ "budgetCents": null }` to clear it). Response `200`, full cart.
 
-### `PATCH /api/cart/items/:itemId`
-Request (either field optional): `{ "quantity": 2, "locked": true }`.
+### `POST /api/boards/:boardId/cart/items`
+Request: `{ "productId": "...", "quantity": 1 }` (`quantity` optional, defaults to `1`, 1–99). Response `201`, full cart. `404 NOT_FOUND` if the product doesn't exist or isn't `available`; `400 VALIDATION` if the product is already in the cart (use `PATCH` on the existing item instead of adding it twice).
 
-### `DELETE /api/cart/items/:itemId`
-Removes the item from the cart.
+### `PATCH /api/boards/:boardId/cart/items/:itemId`
+Request (either field optional): `{ "quantity": 2, "locked": true }`. Response `200`, full cart. `404 NOT_FOUND` if the item isn't in this board's cart.
 
-### `PATCH /api/cart`
-Request: `{ "budgetCents": 25000 }`.
+### `DELETE /api/boards/:boardId/cart/items/:itemId`
+Response `200`, full cart (not `{ "ok": true }` — the point is to hand back fresh totals after removal).

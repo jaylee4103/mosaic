@@ -39,34 +39,13 @@ type ProductRow = {
   available: boolean
 }
 
-export async function searchProducts(
-  filters: ProductSearchFilters,
-  db: SupabaseClient = getSupabaseAdmin(),
-): Promise<Product[]> {
-  let request = db
-    .from('products')
-    .select('id, merchant_id, name, description, category, price_cents, currency, image_url, product_url, available')
-    .eq('available', true)
-    .order('name', { ascending: true })
+const PRODUCT_COLUMNS = 'id, merchant_id, name, description, category, price_cents, currency, image_url, product_url, available'
 
-  if (filters.category) request = request.ilike('category', filters.category)
-  if (typeof filters.maxPriceCents === 'number') request = request.lte('price_cents', filters.maxPriceCents)
-  if (filters.query) request = request.ilike('name', `%${filters.query}%`)
-
-  const { data, error } = await request
-  if (error) throw new Error('Could not search products')
-  const rows = (data ?? []) as ProductRow[]
-  if (rows.length === 0) return []
-
-  const merchantIds = [...new Set(rows.map((row) => row.merchant_id))]
-  const { data: merchants, error: merchantError } = await db.from('merchants').select('id, name').in('id', merchantIds)
-  if (merchantError) throw new Error('Could not load merchants for search results')
-  const merchantNameById = new Map(((merchants ?? []) as Array<{ id: string; name: string }>).map((m) => [m.id, m.name]))
-
-  return rows.map((row) => ({
+function mapProductRow(row: ProductRow, merchantName: string): Product {
+  return {
     id: row.id,
     merchantId: row.merchant_id,
-    merchantName: merchantNameById.get(row.merchant_id) ?? 'Unknown merchant',
+    merchantName,
     name: row.name,
     description: row.description,
     category: row.category,
@@ -75,5 +54,44 @@ export async function searchProducts(
     imageUrl: row.image_url,
     productUrl: row.product_url,
     available: row.available,
-  }))
+  }
+}
+
+async function attachMerchantNames(rows: ProductRow[], db: SupabaseClient): Promise<Product[]> {
+  if (rows.length === 0) return []
+  const merchantIds = [...new Set(rows.map((row) => row.merchant_id))]
+  const { data, error } = await db.from('merchants').select('id, name').in('id', merchantIds)
+  if (error) throw new Error('Could not load merchants for products')
+  const nameById = new Map(((data ?? []) as Array<{ id: string; name: string }>).map((m) => [m.id, m.name]))
+  return rows.map((row) => mapProductRow(row, nameById.get(row.merchant_id) ?? 'Unknown merchant'))
+}
+
+export async function searchProducts(
+  filters: ProductSearchFilters,
+  db: SupabaseClient = getSupabaseAdmin(),
+): Promise<Product[]> {
+  let request = db.from('products').select(PRODUCT_COLUMNS).eq('available', true).order('name', { ascending: true })
+
+  if (filters.category) request = request.ilike('category', filters.category)
+  if (typeof filters.maxPriceCents === 'number') request = request.lte('price_cents', filters.maxPriceCents)
+  if (filters.query) request = request.ilike('name', `%${filters.query}%`)
+
+  const { data, error } = await request
+  if (error) throw new Error('Could not search products')
+  return attachMerchantNames((data ?? []) as ProductRow[], db)
+}
+
+// Used by the cart service to resolve current catalog prices/details for
+// items already in a cart — includes unavailable products (a cart shouldn't
+// silently drop an item just because the merchant marked it unavailable).
+export async function getProductsByIds(
+  ids: string[],
+  db: SupabaseClient = getSupabaseAdmin(),
+): Promise<Map<string, Product>> {
+  const uniqueIds = [...new Set(ids)]
+  if (uniqueIds.length === 0) return new Map()
+  const { data, error } = await db.from('products').select(PRODUCT_COLUMNS).in('id', uniqueIds)
+  if (error) throw new Error('Could not load products')
+  const products = await attachMerchantNames((data ?? []) as ProductRow[], db)
+  return new Map(products.map((product) => [product.id, product]))
 }
