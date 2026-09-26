@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Services (initialized on first use for lazy model loading)
 _embedding_service: EmbeddingService | None = None
 _decision_client: JevClient | OpenRouterClient | None = None
 _aggregation_service: AggregationService | None = None
@@ -125,16 +124,11 @@ async def analyze_images(
     logger.info("Aggregated facets: %s", aggregated.surviving_facets())
     logger.info("Facet confidences: %s", aggregated.confidence)
 
-    # 6. Confidence gating
-    confidence = 0.5
-    if decision:
-        try:
-            confidence = await decision.score_confidence(aggregated.model_dump_json())
-            logger.info("Decision layer confidence: %.3f", confidence)
-        except Exception as e:
-            confidence = 0.5
-            logger.warning("Decision layer failed, using default confidence: %s", e)
-    if confidence < 0.3:
+    # 6. Confidence gating — use mean facet confidence from embedding service
+    facet_confs = [v for v in aggregated.confidence.values() if v > 0]
+    confidence = sum(facet_confs) / len(facet_confs) if facet_confs else 0.0
+    logger.info("Mean facet confidence: %.3f", confidence)
+    if confidence < 0.05:
         return AnalyzeResponse(
             vibe=VibeResult(
                 phrase="",
