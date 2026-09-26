@@ -29,6 +29,7 @@ test('two-store checkout survives separate route instances and only verifies Lin
   const created: Array<{ merchantId: string; amount: number }> = []
   const paymentStores = {
     async verifyDistinctAccounts() {},
+    async accountFor(merchantId: string) { return { key: `key_${merchantId}`, accountId: `acct_${merchantId}` } },
     async createSession(input: { checkoutId: string; merchantId: string; amount: number; currency: string; approvalId: string }): Promise<DemoPayment> {
       created.push({ merchantId: input.merchantId, amount: input.amount })
       return { id: `cs_test_${input.merchantId}`, merchantId: input.merchantId,
@@ -76,6 +77,7 @@ test('pending approvals cannot create orders or payment sessions', async () => {
   let paymentCreates = 0
   const paymentStores = {
     async verifyDistinctAccounts() {},
+    async accountFor(merchantId: string) { return { key: `key_${merchantId}`, accountId: `acct_${merchantId}` } },
     async createSession(): Promise<DemoPayment> { paymentCreates++; throw new Error('Should not create payment') },
     async verifySession(payment: DemoPayment) { return payment },
   }

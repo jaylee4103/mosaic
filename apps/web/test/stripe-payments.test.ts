@@ -58,3 +58,27 @@ test('a paid card session does not count as a verified Link payment', async () =
   expect(result.paymentMethodType).toBe('card')
   expect(result.verified).toBe(false)
 })
+
+test('retrying an expired merchant uses a new Stripe idempotency key', async () => {
+  const idempotencyKeys: string[] = []
+  const stores = createStripePaymentStores({
+    keys,
+    request: async (_key, path, options) => {
+      if (path === 'account') return { id: 'acct_store-a' }
+      if (path === 'checkout/sessions') {
+        idempotencyKeys.push(options?.idempotencyKey ?? '')
+        return { id: 'cs_test_store-a', livemode: false, amount_total: 100, currency: 'usd',
+          client_reference_id: 'checkout-test', metadata: { mosaic_merchant_id: 'store-a' },
+          url: 'https://checkout.stripe.com/c/pay/cs_test_store-a' }
+      }
+      throw new Error(`Unexpected Stripe path ${path}`)
+    },
+  })
+  const input = { checkoutId: 'checkout-test', cartId: 'cart-demo-1', merchantId: 'store-a',
+    items: [{ productId: 'lamp-a', merchantId: 'store-a', name: 'Demo lamp', unitAmount: 100, quantity: 1 }],
+    amount: 100, currency: 'usd', approvalId: '', baseUrl: 'http://127.0.0.1:3000' }
+  await stores.createSession(input)
+  await stores.createSession({ ...input, retryOf: 'cs_test_expired' })
+  expect(idempotencyKeys).toHaveLength(2)
+  expect(idempotencyKeys[0]).not.toBe(idempotencyKeys[1])
+})

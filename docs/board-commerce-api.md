@@ -188,3 +188,17 @@ Response `200`:
 Server-enforced rules: `ADD`/`REPLACE` still validate the product exists and is `available` (404) and reject duplicates (400), same as the plain cart endpoints. `REMOVE` and the outgoing side of `REPLACE` are rejected with `code: "LOCKED"` if the target item is locked — the agent must `UNLOCK` it first. `SET_BUDGET` is never blocked by the current total (an over-budget cart is a UI/agent concern, not a hard server constraint).
 
 A malformed body (not `{ actions: [...] }`), an empty `actions` array, or more than 20 actions is a request-level `400 VALIDATION` (the whole request fails, not per-action). A board owned by another guest is a request-level `404 NOT_FOUND`, checked once up front.
+
+## Two-store sandbox checkout
+
+`POST /api/boards/:boardId/checkout` snapshots the current cart into one order per merchant, then locks the cart. The response contains `id`, `boardId`, `cartId`, `status`, `totalCents`, `currency`, `approvalMode`, and `merchantOrders`. Each merchant order reports `amountCents`, `paymentStatus`, `paymentMethodType`, and `linkVerified`. `approvalMode` is `hosted_checkout` by default. With the local `LINK_CLI_ENABLED=true` development setting, it is `link_cli` and Link spend-request approvals are required first.
+
+`GET /api/boards/:boardId/checkout` returns the latest checkout, including after payment completes. In local CLI mode it also refreshes pending approvals.
+
+`POST /api/boards/:boardId/checkout/payments` creates or resumes a hosted Stripe **test** Checkout Session for each unpaid merchant and includes each `checkoutUrl` in the response. The customer opens each URL and approves that merchant payment on Stripe. Item names, quantities, and prices come from the snapshot taken when checkout started. A paid merchant is skipped on retry.
+
+`GET /api/boards/:boardId/checkout/payments` verifies each Stripe Checkout Session and PaymentIntent with that merchant's test account. One paid store and one unpaid store yield `status: "partial"`. Once both are paid, the checkout and cart become `completed`; the next cart request creates a fresh cart. A card payment is recorded as paid but has `linkVerified: false`; Link use is only claimed when Stripe confirms its payment method is Link.
+
+If an unpaid Stripe Checkout Session expires, another `POST /checkout/payments` creates a new test session for that merchant only. A transient verification error is reported on that merchant order and can be retried by refreshing payment status. These retries do not create a second session for a merchant already recorded as paid.
+
+`GET /api/boards/:boardId/checkout/return` gives a compact summary after a Stripe hosted return. No physical retailer order is placed. The hosted route works without the local Link CLI, but a deployed agent-wallet approval flow still requires a supported server API and credentials.

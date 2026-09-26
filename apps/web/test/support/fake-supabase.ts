@@ -15,7 +15,7 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
   private predicates: Array<(row: FakeRow) => boolean> = []
   private orderBy: { column: string; ascending: boolean } | undefined
   private mode: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select'
-  private payload: FakeRow | undefined
+  private payload: FakeRow | FakeRow[] | undefined
   private countOnly = false
   private upsertConflictColumn: string | undefined
 
@@ -58,7 +58,7 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
     return this
   }
 
-  insert(row: FakeRow): this {
+  insert(row: FakeRow | FakeRow[]): this {
     this.mode = 'insert'
     this.payload = row
     return this
@@ -89,9 +89,10 @@ class FakeQueryBuilder implements PromiseLike<QueryResult> {
   private resolve(): QueryResult {
     const now = new Date().toISOString()
     if (this.mode === 'insert') {
-      const row: FakeRow = { id: crypto.randomUUID(), created_at: now, updated_at: now, ...this.payload }
-      this.table.push(row)
-      return { data: row, error: null }
+      const rows = (Array.isArray(this.payload) ? this.payload : [this.payload as FakeRow]).map((item) =>
+        ({ id: crypto.randomUUID(), created_at: now, updated_at: now, ...item }))
+      this.table.push(...rows)
+      return { data: Array.isArray(this.payload) ? rows : rows[0], error: null }
     }
     if (this.mode === 'upsert') {
       const payload = this.payload as FakeRow
@@ -193,6 +194,9 @@ export function createFakeSupabase(seed: Record<string, FakeRow[]> = {}) {
     products: seed.products ?? [],
     carts: seed.carts ?? [],
     cart_items: seed.cart_items ?? [],
+    checkout_sessions: seed.checkout_sessions ?? [],
+    merchant_orders: seed.merchant_orders ?? [],
+    order_items: seed.order_items ?? [],
   }
   const objects = new Map<string, Uint8Array>()
 
