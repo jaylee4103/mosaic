@@ -47,3 +47,7 @@ The developer running the backend must first connect the Link CLI with `npx link
 The older `POST /api/demo/checkout/complete` creates **local simulated orders only**. Its `test_orders_created` status is not payment evidence.
 
 The checkout session is saved in `backend/.local/checkout-session.json`, which is excluded from Git. Repeating payment preparation does not create duplicate Stripe Checkout Sessions for the same cart and merchants. An expired or canceled Checkout Session needs a new checkout ID before it can be retried.
+
+## Supabase guest setup
+
+The schema and setup steps are in [`../supabase/README.md`](../supabase/README.md). After configuring the project, `GET /api/guest` issues an HttpOnly guest cookie and returns the guest ID. The checkout demo can still run without Supabase; `/api/guest` returns `503` until the project URL and secret key are configured. Keep the secret key in the ignored `backend/.env` and load it into the server process. No Mosaic sign-in is required.

@@ -5,6 +5,8 @@ import { createLinkCheckout } from "./link-checkout.mjs";
 import { createTestStores } from "./demo-stores.mjs";
 import { createStripePaymentStores } from "./stripe-payments.mjs";
 import { loadDemoSession, saveDemoSession } from "./session-store.mjs";
+import { getSupabaseAdmin } from "./supabase.mjs";
+import { createGuestSessionService } from "./guest-session.mjs";
 
 const linkCheckout = createLinkCheckout(createLinkAuthorizer(), {
   testStores: createTestStores(),
@@ -13,6 +15,12 @@ const linkCheckout = createLinkCheckout(createLinkAuthorizer(), {
   initialSession: await loadDemoSession(),
   onChange: saveDemoSession,
 });
+let guestSessions;
+
+function getGuestSessions() {
+  guestSessions ??= createGuestSessionService(getSupabaseAdmin());
+  return guestSessions;
+}
 
 const server = createServer(async (request, response) => {
   response.setHeader("content-type", "application/json; charset=utf-8");
@@ -20,6 +28,17 @@ const server = createServer(async (request, response) => {
 
   if (request.method === "GET" && request.url === "/health") {
     response.writeHead(200).end(JSON.stringify({ ok: true, mode: "test-only" }));
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/api/guest") {
+    try {
+      const guestId = await getGuestSessions().getOrCreate(request, response);
+      response.writeHead(200).end(JSON.stringify({ guestId }));
+    } catch (error) {
+      const status = error.code === "SUPABASE_NOT_CONFIGURED" ? 503 : 502;
+      response.writeHead(status).end(JSON.stringify({ error: error.message }));
+    }
     return;
   }
 
