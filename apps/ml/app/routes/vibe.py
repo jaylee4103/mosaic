@@ -89,9 +89,13 @@ async def analyze_images(
     logger.info("Aggregated facets: %s", aggregated.surviving_facets())
     logger.info("Facet confidences: %s", aggregated.confidence)
 
-    # 5. Confidence gating
-    facet_confs = [v for v in aggregated.confidence.values() if v > 0]
-    confidence = sum(facet_confs) / len(facet_confs) if facet_confs else 0.0
+    # 5. Confidence gating — use mean softmax probability from embedding
+    per_image_probs = []
+    for profile in per_image_facets:
+        confs = [v for v in profile.confidence.values() if v > 0]
+        if confs:
+            per_image_probs.append(sum(confs) / len(confs))
+    confidence = sum(per_image_probs) / len(per_image_probs) if per_image_probs else 0.0
     logger.info("Mean facet confidence: %.3f", confidence)
     if confidence < 0.05:
         return AnalyzeResponse(
