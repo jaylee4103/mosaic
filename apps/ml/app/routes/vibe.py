@@ -124,11 +124,6 @@ async def analyze_images(
     logger.info("Aggregated facets: %s", aggregated.surviving_facets())
     logger.info("Facet confidences: %s", aggregated.confidence)
 
-    # 6. Confidence gating — use mean facet confidence from embedding service
-    facet_confs = [v for v in aggregated.confidence.values() if v > 0]
-    confidence = sum(facet_confs) / len(facet_confs) if facet_confs else 0.0
-    logger.info("Mean facet confidence: %.3f", confidence)
-    if confidence < 0.05:
         return AnalyzeResponse(
             vibe=VibeResult(
                 phrase="",
@@ -138,6 +133,7 @@ async def analyze_images(
                 message="Low confidence — try uploading more cohesive images.",
             )
         )
+    # Always include facet-level confidences for debugging
 
     # 7. Domain routing (cross-domain mode)
     if mode == "cross" and target_domain:
