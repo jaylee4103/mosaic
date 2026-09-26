@@ -12,7 +12,7 @@ from app.models.facets import DOMAIN_AGNOSTIC_FACETS, FacetProfile
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "google/siglip2-base-patch16-224"
-PROMPT_TEMPLATE = "This is a photo of {tag}."""
+PROMPT_TEMPLATE = "This is a photo of {tag}."
 
 
 class EmbeddingService:
@@ -39,8 +39,6 @@ class EmbeddingService:
         self._logit_scale = self._model.logit_scale
         self._logit_bias = self._model.logit_bias
         logger.info("SigLIP2 model loaded. logit_scale=%.4f, logit_bias=%.4f",
-                    float(self._logit_scale), float(self._logit_bias)),
-                    float(self._logit_scale.detach()), float(self._logit_bias.detach())),
                     float(self._logit_scale.detach()), float(self._logit_bias.detach()))
 
     async def embed_image(self, image_bytes: bytes) -> list[float]:
@@ -81,7 +79,7 @@ class EmbeddingService:
                 all_prompts.append(PROMPT_TEMPLATE.format(tag=tag))
                 prompt_to_facet.append(facet)
 
-        # #Computesigmoid#ComputesigmoidComputeprobabilitiesprobabilities sigmoidperper probabilitiesfacet
+        # Compute sigmoid probabilities per facet
         profile = FacetProfile()
         confidence: dict[str, float] = {}
         img_vec = torch.tensor(image_embedding, dtype=torch.float32)
@@ -89,44 +87,6 @@ class EmbeddingService:
         for facet in vocabularies:
             # Get prompts for this facet
             indices = [i for i, f in enumerate(prompt_to_facet) if f == facet]
-            facet_prompts = [all_prompts[i] for i in indices]
-
-            # Embed text prompts
-            text_emb = self._embed_texts(facet_prompts)
-            text_mat = torch.tensor(text_emb, dtype=torch.float32)
-
-            # Normalize
-            text_mat = text_mat / text_mat.norm(dim=-1, keepdim=True)
-            img_norm = img_vec / img_vec.norm()
-
-            # Cosine similarity
-            cos_sim = (text_mat * img_norm).sum(dim=-1)
-
-            # Apply logit_scale and logit_bias, then sigmoid
-            logits = cos_sim * self._logit_scale + self._logit_bias
-            probs = torch.sigmoid(logits)
-
-            # Top tag and its probability
-            top_idx = int(torch.argmax(probs))
-            facet_prompts = [all_prompts[i] for i in indices]
-
-            # Embed text prompts
-            text_emb = self._embed_texts(facet_prompts)
-            text_mat = torch.tensor(text_emb, dtype=torch.float32)
-
-            # Normalize
-            text_mat = text_mat / text_mat.norm(dim=-1, keepdim=True)
-            img_norm = img_vec / img_vec.norm()
-
-            # Cosine similarity
-            cos_sim = (text_mat * img_norm).sum(dim=-1)
-
-            # Apply logit_scale and logit_bias, then sigmoid
-            logits = cos_sim * self._logit_scale + self._logit_bias
-            probs = torch.sigmoid(logits)
-
-            # Top tag and its probability
-            top_idx = int(torch.argmax(probs))
             facet_prompts = [all_prompts[i] for i in indices]
 
             # Embed text prompts
@@ -162,16 +122,8 @@ class EmbeddingService:
             batch = texts[i : i + batch_size]
             inputs = self._processor(
                 text=batch,
-                
-                
                 return_tensors="pt",
-                
-                
-                padding="max_length""max_length""max_length",
-                max_length=64,
-                
-                max_length=64,
-                
+                padding="max_length",
                 max_length=64,
                 truncation=True,
             ).to(self.device)
