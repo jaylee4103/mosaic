@@ -15,6 +15,14 @@ Mosaic combines multimodal AI, product discovery, an editable AI-managed cart, a
 
 > The user provides the inspiration. Mosaic understands the aesthetic, finds the products, and builds the cart.
 
+## Current implementation and verified progress
+
+The repository currently contains a Next.js 16 frontend scaffold in `apps/web/`, an early FastAPI vibe detection service in `apps/ml/`, and a standalone checkout test backend in [`backend/`](backend/README.md). The design and architecture sections below describe the intended product; the mood board UI, shopping agent, production order routing, and frontend checkout integration are not implemented yet.
+
+**Completed on September 26, 2026:** One demo Mosaic cart was split into two merchant totals and paid through two distinct Stripe **sandbox** merchant accounts using Link. Store A's Ceramic Demo Lamp was **$1.00** and Store B's Terracotta Demo Vase was **$2.00**. Both Stripe Checkout Sessions finished with `payment_status: paid`; their PaymentIntents succeeded for the exact amounts, and both PaymentMethods had `type: link`. Stripe reported `livemode: false` throughout, so no real funds moved. The buyer made the final purchase decisions on Stripe's hosted pages without a Mosaic sign-in.
+
+This proves the two-merchant **test payment flow**, not physical fulfillment or a production unified checkout. The backend's older local `not_charged` receipts are simulated and are not counted as payment evidence. The two hosted Stripe pages still require a separate customer confirmation for each merchant. Details, API endpoints, setup, and the verified test identifiers are in the [backend README](backend/README.md). Run `npm test` in `backend/` to check the nine backend tests.
+
 ## Why Mosaic
 
 Traditional online shopping starts with search.
@@ -496,7 +504,7 @@ The model determines what should change.
 
 Application code verifies whether the resulting cart actually satisfies the constraint.
 
-## Unified checkout
+## Unified checkout (planned product flow)
 
 Mosaic is designed around participating merchants rather than sending users through separate retailer checkout flows.
 
@@ -538,7 +546,7 @@ sequenceDiagram
     M-->>U: Unified confirmation
 ```
 
-For a production marketplace, participating merchants would be onboarded through the payment platform rather than being arbitrary websites that merely happen to accept PayPal.
+For a production marketplace, participating merchants would be onboarded through the payment platform. The current Stripe Link sandbox prototype confirms two payments from one cart using two hosted merchant checkout pages; it does not yet provide the single confirmation flow illustrated above.
 
 The hackathon implementation can demonstrate this architecture using sandbox sellers.
 
@@ -770,9 +778,9 @@ flowchart TB
 
 ### Payments
 
-- PayPal checkout
-- PayPal sandbox sellers for the prototype
-- Multiparty commerce architecture for participating merchants
+- Stripe Link sandbox checkout in the standalone backend (implemented and verified)
+- Frontend checkout integration and production seller onboarding (planned)
+- The PayPal flow shown in the product diagrams is a design proposal, not implemented code
 
 ### Deployment
 
@@ -1018,7 +1026,7 @@ Budget verification
       ↓
 User review
       ↓
-PayPal checkout
+Stripe Link sandbox checkout prototype (implemented); integrated production checkout remains planned
       ↓
 Order confirmation
 ```
