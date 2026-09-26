@@ -57,6 +57,8 @@ class AggregationService:
         aggregated = FacetProfile()
         confidence: dict[str, float] = {}
 
+        logger.info("Aggregating %d per-image facet profiles", len(per_image_facets))
+
         for facet in facet_names:
             votes = []
             for profile in per_image_facets:
@@ -76,6 +78,9 @@ class AggregationService:
             if vote_fraction >= CONFIDENCE_THRESHOLD:
                 setattr(aggregated, facet, top_tag)
                 confidence[facet] = vote_fraction
+                logger.info("Facet %s: %s (%.2f)", facet, top_tag, vote_fraction)
+            else:
+                logger.info("Facet %s dropped: %s (%.2f < %.2f)", facet, top_tag, vote_fraction, CONFIDENCE_THRESHOLD)
 
         aggregated.confidence = confidence
         return aggregated
@@ -93,6 +98,7 @@ class AggregationService:
             True if the set appears to be multiple distinct sub-vibes.
         """
         if len(embeddings) < 3:
+            logger.info("Too few images (%d) for heterogeneity detection", len(embeddings))
             return False  # Too few images to cluster meaningfully
 
         X = np.array(embeddings)
@@ -107,6 +113,7 @@ class AggregationService:
 
         # If all images land in one cluster, it's cohesive
         if len(set(labels)) < 2:
+            logger.info("All images in one cluster — cohesive vibe")
             return False
 
         # If silhouette score is low, clusters aren't well-separated
@@ -149,7 +156,9 @@ class AggregationService:
             if profile.energy_mood:
                 parts.append(profile.energy_mood)
 
-        return " ".join(parts) if parts else ""
+        phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase = " ".join(parts) if parts else ""
+        logger.info("Composed phrase: '%s' from parts: %s", phrase, parts)
+        return phrase
 
     async def compose_cross_domain(
         self,
@@ -181,4 +190,6 @@ class AggregationService:
             descriptors.append(profile.density_complexity)
 
         vibe_description = ", ".join(descriptors) if descriptors else "eclectic"
-        return f"{vibe_description} {target_domain.replace('_', ' ')}"
+        phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase =phrase = f"{vibe_description} {target_domain.replace('_', ' ')}"
+        logger.info("Cross-domain phrase: '%s'", phrase)
+        return phrase

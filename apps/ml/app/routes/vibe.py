@@ -1,9 +1,12 @@
 """Vibe detection route — image upload → embedding → aggregation → vibe phrase."""
 
+import logging
 import os
 
 from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from app.models.facets import FACET_VOCABULARIES, FacetProfile
 from app.models.vibe import VibeResult
@@ -59,9 +62,14 @@ async def analyze_images(
     target_domain: str | None = Form(None),  # e.g., "outfit", "home_goods", "music"
 ):
     """Analyze a set of images and return a vibe description or recommendation."""
+    logger.info("Analyzing %d images (mode=%s)", len(files), mode)
+
     # 1. Pre-triage with decision layer — filter out noise images (skip if no key or on error)
     decision = get_decision_client()
     if decision:
+        logger.info("Decision client available — running pre-triage")
+    else:
+        logger.info("No decision client — skipping pre-triage")
         keep_indices: list[int] = []
         for i, f in enumerate(files):
             content = await f.read()
@@ -92,6 +100,7 @@ async def analyze_images(
         kept_files = files
 
     # 2. Embed each image with SigLIP2
+    logger.info("Embedding %d images with SigLIP2", len(kept_files))
     embedder = get_embedding_service()
     embeddings: list[list[float]] = []
     for f in kept_files:
@@ -99,27 +108,51 @@ async def analyze_images(
         await f.seek(0)
         embedding = await embedder.embed_image(content)
         embeddings.append(embedding)
+    logger.info("Generated %d embeddings (dim=%d)", len(embeddings), len(embeddings[0]) if embeddings else 0)
 
     # 3. Heterogeneity detection — single vibe or mixed set?
     aggregator = get_aggregation_service()
     is_mixed = await aggregator.detect_heterogeneity(embeddings)
+    logger.info("Heterogeneity detection: mixed=%s", is_mixed)
 
     # 4. Zero-shot facet classification per image
     per_image_facets: list[FacetProfile] = []
-    for emb in embeddings:
+    for i, emb in enumerate(embeddings):
         profile = await embedder.classify_facets(emb, FACET_VOCABULARIES)
+        logger.info("Image %d facets: %s", i, profile.surviving_facets())
         per_image_facets.append(profile)
 
     # 5. Set-level aggregation (majority-vote)
     aggregated = await aggregator.aggregate(per_image_facets)
+    logger.info("Aggregated facets: %s", aggregated.surviving_facets())
+    logger.info("Facet confidences: %s", aggregated.confidence)
 
     # 6. Confidence gating with decision layer
     confidence = 0.5
     if decision:
         try:
             confidence = await decision.score_confidence(aggregated.model_dump_json())
-        except Exception:
+            logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+                    logger.info("Decision layer confidence: %.3f", confidence)
+        except Exception as e:
             confidence = 0.5  # Default if decision layer fails
+            logger.warning("Decision layer failed, using default confidence: %s", e)
     if confidence < 0.3:
         return AnalyzeResponse(
             vibe=VibeResult(
@@ -147,6 +180,9 @@ async def analyze_images(
         phrase = aggregator.compose_phrase(aggregated)
     else:
         phrase = aggregator.compose_cross_domain(aggregated, domain)
+
+    logger.info("Final result: phrase='%s', confidence=%.3f, mixed=%s, domain=%s",
+                phrase, confidence, is_mixed, domain)
 
     return AnalyzeResponse(
         vibe=VibeResult(
