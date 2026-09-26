@@ -18,6 +18,7 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | `DELETE /api/boards/:boardId/images/:imageId` | Delete an image and its storage object |
 | `GET /api/boards/:boardId/vibe-profile` | Get the board's saved vibe profile |
 | `PUT /api/boards/:boardId/vibe-profile` | Save the AI service's vibe result for a board (upsert) |
+| `GET /api/products/search` | Search the demo product catalog by `query`, `category`, `maxPrice` (no guest cookie needed) |
 | `GET /api/demo/cart` | Show the fixed $1 + $2 two-store test cart |
 | `POST /api/demo/checkout` | Request separate Stripe Link test approvals |
 | `GET /api/demo/checkout` | Refresh approval statuses |
@@ -27,6 +28,8 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | `GET /api/demo/checkout/return` | Show a payment summary after a Stripe return |
 
 See `../../docs/board-commerce-api.md` for the full board, image, vibe profile, product, and cart request/response contract.
+
+Run `bun run seed:products` to (re-)populate the two-store demo product catalog that `/api/products/search` reads from.
 
 Guest sessions and demo checkout state are stored in Supabase, so separate Next.js requests can resume the same cart. The second migration adds `demo_checkout_sessions` with an optimistic version check to reject conflicting writes. The browser roles have no direct access to these tables. The server secret key bypasses row level security, so each route resolves the guest cookie before loading checkout state.
 
