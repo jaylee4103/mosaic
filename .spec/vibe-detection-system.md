@@ -1,8 +1,8 @@
 # Vibe Detection System — Architecture Spec
 
-> **Status:** Draft v1  
+> **Status:** Draft v2  
 > **Branch:** `vyang/docs-spec-design-doc`  
-> **Source:** Architecture research & design handoff (Claude session)
+> **Source:** Architecture research & design handoff + implementation research
 
 ---
 
@@ -35,31 +35,32 @@ Every production system researched (Spotify, Pinterest, Apple Photos) follows th
 ## 3. System Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     USER SESSION (stateless)                     │
-│                                                                 │
-│  [Image Set] ──► Perception Layer ──► Aggregation ──► Composer  │
-│                      │                      │            │      │
-│                      ▼                      ▼            ▼      │
-│              Embedding + VLM         Facet Profile    Output     │
-│              + Feature Extract       + Clusters       (phrase/  │
-│                                                       recommend) │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                         USER SESSION (stateless)                     │
+│                                                                     │
+│  [Image Set] ──► Perception Layer ──► Aggregation ──► Composer      │
+│                      │                      │            │          │
+│                      ▼                      ▼            ▼          │
+│              Embedding + VLM         Facet Profile    Output         │
+│              + Feature Extract       + Clusters        (phrase/     │
+│                                                       recommend)    │
+└─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
               ┌───────────────────────────────┐
               │     Jev (TypeSafe AI)          │
               │  Typed decisions downstream    │
               │  of perception layer           │
+              │  (text/JSON state only)        │
               └───────────────────────────────┘
 ```
 
 ### Pipeline Stages
 
-1. **Perception** — embed each image, extract structured features
-2. **Aggregation** — combine per-image signals into a set-level profile
+1. **Perception** — embed each image, extract structured features (SigLIP2 + optional VLM captioning)
+2. **Aggregation** — combine per-image signals into a set-level facet profile
 3. **Composition** — map the profile to language (intra-domain) or route to a target-domain system (cross-domain)
-4. **Jev layer** — typed decision-making at classification, routing, gating, and reranking points
+4. **Jev layer** — typed decision-making at classification, routing, gating, and reranking points (consumes text/JSON state only)
 
 ---
 
@@ -67,23 +68,25 @@ Every production system researched (Spotify, Pinterest, Apple Photos) follows th
 
 ### 4.1 Embedding Backbone
 
-| Option | Notes |
+**Decision: SigLIP2** (`google/siglip2-base-patch16-224` or `so400m-patch14-384`)
+
+| Factor | Details |
 |---|---|
-| **SigLIP2** (preferred candidate) | Strong zero-shot performance; confirm fine-tuning support |
-| **OpenCLIP** | Alternative; broader community fine-tuning ecosystem |
-
-**Critical finding:** Generic CLIP performs poorly on architecture/interior-design classification due to lack of domain prior knowledge (ArchiCLIP paper). Fine-tuning on a domain-specific dataset (DesignHelper) achieved **85.9% accuracy** on style classification — notably better than generic zero-shot.
-
-**Decision:** Plan for offline fine-tuning on interior-design-style data if the primary use case is interior/room photos. Fall back to zero-shot SigLIP2 for novel domains.
+| **Why SigLIP2** | Outperforms SigLIP 1 at all scales in zero-shot classification, image-text retrieval, and transfer performance |
+| **Model size** | Base: 86M params (~0.4B with text tower); SO400M: 400M params |
+| **Fine-tuning** | Supported; 129 fine-tuned variants already on HuggingFace |
+| **Alternative** | OpenCLIP — broader ecosystem but SigLIP2 is newer and better performing |
+| **Domain fine-tuning** | Required for interior-design use case (ArchiCLIP finding: generic CLIP performs poorly on architecture/interior classification) |
+| **Target accuracy** | ≥85.9% (DesignHelper benchmark with fine-tuned CLIP) |
 
 ### 4.2 Feature Extractors (per image)
 
 | Feature | Method | Output |
 |---|---|---|
-| Embedding vector | SigLIP2 / OpenCLIP | `float[N]` |
-| VLM caption | Optional per-image captioning | `text` |
+| Embedding vector | SigLIP2 | `float[N]` |
+| VLM caption | Optional per-image captioning (e.g., LLaVA, GPT-4o) | `text` |
 | Color palette | Low-level color analysis | Dominant colors, warmth, saturation |
-| Scene tags | Zero-shot classification | Tag + confidence per tag |
+| Scene tags | Zero-shot classification against facet vocabulary | Tag + confidence per tag |
 
 ### 4.3 Curated Vocabulary Banks (offline)
 
@@ -199,35 +202,196 @@ Check whether curated collections exist that already pair source and target doma
 
 ## 7. Jev (TypeSafe AI) Integration
 
-Jev is a non-autoregressive "System One" decision model. Key properties:
+### 7.1 Key Constraint — Text/Only Input
 
-- Takes **text/structured state** as input
-- Returns **typed answers** (Choice / Score / Noul primitives) with calibrated confidence
-- Constrained to a declared schema, in a single parallel pass
-- **Not** autoregressive text generation; **not** an image model
+> **Confirmed from TypeSafe docs:** Jev's `state` must be a string, JSON object, or array of text values. **Images, audio, and video are not supported.** Embeddings/numeric feature vectors are not accepted as state.
 
-### Insertion Points
+This means a **captioning/feature-extraction step must precede Jev** regardless. Jev consumes the text/JSON output of the perception layer.
+
+### 7.2 API Overview
+
+```
+POST https://api.typesafe.ai/v1/systemone
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+```
+
+**Primitives:**
+
+| Type | Returns | Use Case |
+|---|---|---|
+| **Choice** | `choice`, `probabilities`, `confidence` | Pick from fixed options (domain routing, facet classification) |
+| **Score** | `score`, `legend`, `probabilities`, `confidence` | Rate on a spectrum (confidence gating, candidate reranking) |
+| **Noul** | `noul` (0–1) | Yes/no judgment (heterogeneity detection, pre-triage) |
+
+**Key properties:**
+- Every question is evaluated in parallel and in isolation against the same state
+- Adding questions barely changes response time
+- Every answer is constrained to the options you supplied — no hallucinated values
+- Confidence included with every answer
+
+### 7.3 Insertion Points
 
 | # | Insertion Point | Jev Role | Input State | Output |
 |---|---|---|---|---|
-| 1 | **Facet classification** | Produce structured facet values with calibrated confidence instead of prompting an LLM for JSON | Text description of a vibe | `Choice` per facet + `Score` confidence |
+| 1 | **Facet classification** | Produce structured facet values with calibrated confidence | Text/JSON description of a vibe | `Choice` per facet + `Score` confidence |
 | 2 | **Domain routing** | Route to correct target-domain system | Request text + extracted vibe | `Choice` over known target domains |
-| 3 | **Confidence gating** | Decide per-session whether vibe read is solid enough to present | Facet confidences + cluster stats | `Score` confidence; `Noul` if uncertain |
-| 4 | **Heterogeneity detection** | "Single cohesive vibe or mixed set?" | Cluster statistics (count, intra/inter distance) | `Choice` + `Noul` |
-| 5 | **Candidate reranking** | Judge each candidate against target facets before final ranking | Candidate features + target facets | `Score` per candidate |
-| 6 | **Cheap pre-triage** | Relevance/noise check before spending compute | Lightweight per-image metadata | `Choice` keep/discard |
+| 3 | **Confidence gating** | Decide whether vibe read is solid enough to present | Facet confidences + cluster stats | `Score` confidence; `Noul` if uncertain |
+| 4 | **Heterogeneity detection** | "Single cohesive vibe or mixed set?" | Cluster statistics as text/JSON | `Choice` + `Noul` |
+| 5 | **Candidate reranking** | Judge each candidate against target facets | Candidate features + target facets | `Score` per candidate |
+| 6 | **Cheap pre-triage** | Relevance/noise check before spending compute | Lightweight per-image metadata as text | `Choice` keep/discard |
 
-### Key Constraint
+### 7.4 Pricing
 
-Jev **never replaces the perception layer** (CLIP/SigLIP embeddings, VLM captioning) — it always sits downstream, consuming the state that layer produces. A captioning/feature-extraction step must precede it regardless.
-
-### Open Question
-
-Confirm whether Jev's API accepts embeddings/numeric feature vectors directly as state, or only natural-language/JSON descriptions (determines whether a captioning step can be skipped for the Jev stage).
+- $42 per billion input tokens (238x lower than Claude Fable 5.1)
+- 193.6x faster, 444.6x cheaper than LLMs for System One tasks
+- A typical call: ~392 input tokens, ~65 output tokens → ~$0.000081
 
 ---
 
-## 8. Platform Research Summary
+## 8. Implementation Architecture
+
+### 8.1 Deployment Decision
+
+| Option | Approach | Pros | Cons |
+|---|---|---|---|
+| **A — All on Vercel** | Next.js + Python FastAPI on Vercel | Single platform, git-connected | SigLIP2 model (~1.6GB FP32) exceeds Vercel's 500MB standard bundle limit; cold starts slow |
+| **B — Hybrid (recommended)** | Next.js frontend on Vercel + Python ML service on separate host | Best of both: frontend deploys on Vercel, ML has full flexibility | Two services to manage |
+| **C — All Python** | FastAPI backend + Next.js frontend all in Python service | Single language | Vercel's Next.js integration is best-in-class |
+
+**Recommendation: Option B — Hybrid**
+
+### 8.2 Architecture Diagram
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        VERCEL                                 │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  Next.js 16 (TypeScript, App Router)                  │    │
+│  │  - UI (shadcn/ui on Base UI, Tailwind 4)              │    │
+│  │  - Image upload → POST to ML service                  │    │
+│  │  - Display vibe results                               │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                         │                                     │
+│                         │ HTTP (REST)                         │
+│                         ▼                                     │
+└──────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌──────────────────────────────────────────────────────────────┐
+│              PYTHON ML SERVICE (separate host)                 │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  FastAPI (Python 3.12+)                                │    │
+│  │                                                        │    │
+│  │  POST /api/vibe/analyze                                │    │
+│  │    ├── 1. Pre-triage (Jev: keep/discard images)       │    │
+│  │    ├── 2. SigLIP2 embedding (per image)               │    │
+│  │    ├── 3. VLM captioning (optional, per image)        │    │
+│  │    ├── 4. Zero-shot facet classification              │    │
+│  │    ├── 5. Set-level aggregation (majority-vote)       │    │
+│  │    ├── 6. Heterogeneity detection (Jev)               │    │
+│  │    ├── 7. Confidence gating (Jev)                     │    │
+│  │    └── 8. Composition (template or VLM bridge)         │    │
+│  │                                                        │    │
+│  │  Jev API calls (text/JSON state only)                 │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                                                              │
+│  Model: SigLIP2 (quantized to ~800MB with INT8)              │
+│  Host: Railway / Render / Fly.io / AWS ECS                   │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 8.3 Why a Separate Python Service?
+
+| Factor | Vercel Python Runtime | Separate Python Service |
+|---|---|---|
+| **Bundle size** | 500MB standard, 5GB Large Functions beta | Unlimited (container-based) |
+| **Model size** | SigLIP2 base ~1.6GB FP32 — too large even for standard | Fits comfortably |
+| **Cold start** | Significant with large model | Can use pre-warmed instances |
+| **GPU support** | Not available | Available if needed |
+| **Python ecosystem** | Limited (transformers/torch may not fit) | Full ecosystem |
+| **Scaling** | Manual | Auto-scaling available |
+| **Deployment** | Git-connected, zero config | Requires container/service setup |
+
+### 8.4 Language Choice
+
+| Layer | Language | Rationale |
+|---|---|---|
+| **Frontend** | TypeScript (Next.js 16) | Existing project, best-in-class SSR, Vercel integration |
+| **ML inference** | Python 3.12+ | Native support for `transformers`, `torch`, `siglip`, `fastapi` |
+| **Jev API** | Python (from ML service) | Simple HTTP call; no need for separate service |
+
+**The ML service MUST be Python** — the `transformers` library, SigLIP2, and the entire ML ecosystem are Python-first. There is no production-grade TypeScript alternative for running SigLIP2 inference locally.
+
+### 8.5 Python ML Service — Recommended Host
+
+| Host | Starting Cost | Key Benefit |
+|---|---|---|
+| **Railway** | ~$5/mo | Simplest deployment, good DX, auto-scaling |
+| **Render** | ~$7/mo | Similar to Railway, good Python support |
+| **Fly.io** | ~$5/mo | Edge deployment, fast cold starts |
+| **AWS ECS (Fargate)** | ~$30/mo | Production-grade, VPC networking |
+| **Vercel (Python runtime)** | $0 (Hobby) | Tight integration but bundle limits |
+
+**Recommendation: Railway or Render** — simplest container deployment, enough compute for SigLIP2 inference, reasonable cost for a hackathon project.
+
+---
+
+## 9. Open Questions — Resolved
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Does Jev accept embeddings/numeric vectors? | **No.** State must be string, JSON object, or array of text values. A captioning/feature-extraction step must precede Jev. |
+| 2 | Source/construct faceted vocabulary banks | **Use Pinterest board titles, design blog tags, and Instagram aesthetic hashtags as weak labels.** Start with ~50 tags per facet, expand based on user uploads. |
+| 3 | SigLIP2 vs. OpenCLIP? | **SigLIP2.** Newer (Feb 2025), outperforms SigLIP 1 at all scales, 129 fine-tuned variants on HuggingFace. |
+| 4 | Fine-tuning dataset for interior design? | **DesignHelper dataset** (referenced in ArchiCLIP paper) — target ≥85.9% accuracy. Also consider scraping Pinterest board titles as weak supervision. |
+| 5 | Curated cross-domain collections? | **Check Pinterest API** for boards mixing nature + fashion under aesthetic labels. If accessible, use as training signal for the cross-domain bridge. |
+| 6 | Aggregation strategy? | **Majority-vote** for robust results; mean similarity for small sets (N < 3). Prototype both empirically. |
+| 7 | Heterogeneity detection approach? | **Hierarchical agglomerative clustering** (Apple Photos approach) with median-distance linkage on SigLIP2 embeddings. Flag as "mixed" if silhouette score < threshold. |
+| 8 | Minimal end-to-end prototype? | **See §10 below.** |
+
+---
+
+## 10. Minimal End-to-End Prototype
+
+### Phase 1: Proof of Concept (Days 1–3)
+
+**Goal:** Image upload → SigLIP2 embedding → zero-shot facet classification → vibe phrase
+
+1. **Set up Python FastAPI service** on Railway/Render
+2. **Load SigLIP2** (`google/siglip2-base-patch16-224`)
+3. **Build facet vocabulary bank** (manually curate ~30 tags per facet for interior design)
+4. **Implement zero-shot classification** per image
+5. **Implement majority-vote aggregation** across image set
+6. **Template-based composition** → vibe phrase
+7. **Wire up Next.js frontend** → POST to ML service → display result
+
+### Phase 2: Jev Integration (Days 4–5)
+
+1. **Add Jev pre-triage** — filter out noise images before embedding
+2. **Add Jev confidence gating** — decide if vibe read is solid enough
+3. **Add Jev heterogeneity detection** — "single vibe or mixed set?"
+4. **Add Jev domain routing** — route to intra-domain vs. cross-domain
+
+### Phase 3: Cross-Domain Bridge (Days 6–8)
+
+1. **Implement VLM captioning** for cross-domain vibe extraction
+2. **Build language-mediated bridge** — VLM describes vibe → text query → target catalog
+3. **Test with nature → outfit** as primary cross-domain case
+4. **Add Jev candidate reranking** — score candidates against target facets
+
+### Phase 4: Polish (Days 9–10)
+
+1. **Fine-tune SigLIP2** on interior design dataset (if time permits)
+2. **Optimize aggregation** — prototype mean vs. majority-vote
+3. **Add uncertainty handling** — graceful fallback when confidence is low
+4. **Polish UX** — loading states, error handling, result presentation
+
+---
+
+## 11. Platform Research Summary
 
 | Platform | Key Insight | Lesson for Vibe Detection |
 |---|---|---|
@@ -240,42 +404,36 @@ Confirm whether Jev's API accepts embeddings/numeric feature vectors directly as
 | **Pinterest (Manas)** | HNSW-based ANN retrieval at scale | Production-grade similarity search infrastructure |
 | **Pinterest (Shop The Look)** | Object detection → per-object embedding → same-space product matching | Only works when source and target share object categories; does not solve cross-domain aesthetic resonance |
 | **Apple Photos** | On-device curation; hierarchical agglomerative clustering with median-distance linkage; batch overnight | If privacy constraints apply: model size and clustering must fit on-device budget; batch-during-idle becomes part of architecture |
+| **TypeSafe AI (Jev)** | Typed decisions with calibrated confidence; text/JSON state only; 193x faster than LLMs | Ideal for facet classification, routing, gating, reranking — but requires perception layer to produce text/JSON state first |
+| **Google (SigLIP2)** | Outperforms SigLIP 1 at all scales; supports fine-tuning; strong zero-shot | Right embedding backbone for the perception layer |
 
 ---
 
-## 9. Technical Stack (Current Project)
+## 12. Technical Stack
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 16 (App Router, TypeScript, Turbopack) |
-| UI | shadcn/ui on Base UI, Tailwind CSS 4 |
-| Package manager | Bun |
-| Deployment | Vercel (git-connected, auto-deploy on push to main) |
-| Embedding backbone | SigLIP2 / OpenCLIP (TBD) |
-| Decision layer | Jev (TypeSafe AI) — integration pending |
+| Frontend framework | Next.js 16 (App Router, TypeScript, Turbopack) |
+| UI components | shadcn/ui on Base UI, Tailwind CSS 4 |
+| Package manager (frontend) | Bun |
+| Frontend hosting | Vercel (git-connected, auto-deploy on push to main) |
+| ML service framework | FastAPI (Python 3.12+) |
+| ML service hosting | Railway / Render / Fly.io |
+| Embedding model | SigLIP2 (`google/siglip2-base-patch16-224`) |
+| Decision model | Jev (TypeSafe AI) — text/JSON state only |
+| Model quantization | INT8 (reduces SigLIP2 from ~1.6GB to ~800MB) |
+| Clustering | Hierarchical agglomerative (scikit-learn) |
+| Cross-domain bridge | VLM captioning → text-to-product retrieval |
 
 ---
 
-## 10. Open Questions & Next Steps
-
-| # | Question / Task | Priority |
-|---|---|---|
-| 1 | Confirm whether Jev's API accepts embeddings/numeric vectors directly as state, or only text/JSON | High |
-| 2 | Source or construct faceted vocabulary banks: (a) interior-design-specific, (b) domain-agnostic | High |
-| 3 | Decide embedding backbone: SigLIP2 vs. OpenCLIP | High |
-| 4 | Scope a fine-tuning dataset for interior-design-specific style separation (target: ≥85.9% accuracy benchmark) | Medium |
-| 5 | Evaluate whether curated cross-domain collections are accessible as training/calibration data | Medium |
-| 6 | Prototype aggregation strategy (mean-similarity vs. majority-vote) and confidence-threshold values empirically | Medium |
-| 7 | Decide clustering/heterogeneity-detection approach and threshold for flagging "mixed" upload sets | Medium |
-| 8 | Build a minimal end-to-end prototype: image upload → embedding → facet classification → vibe phrase | High |
-
----
-
-## 11. References
+## 13. References
 
 - ArchiCLIP paper — domain-specific fine-tuning for architecture/interior style classification
 - DesignHelper dataset — interior-design style classification benchmark (85.9% accuracy)
 - Pinterest Engineering Blog — Unified Visual Embeddings, PinSage, PinnerSage, PinCLIP, OmniSearchSage, Manas, Shop The Look
 - Spotify — daylist feature and audio feature pipeline
 - Apple Photos — on-device curation architecture
-- TypeSafe AI — Jev model documentation
+- TypeSafe AI — Jev model documentation (docs.typesafe.ai)
+- Google — SigLIP 2 paper (arXiv:2502.14786) and HuggingFace model family
+- Vercel — Python runtime documentation
