@@ -1,13 +1,21 @@
 """FastAPI entrypoint for the Mosaic Vibe Detection ML Service."""
 
+import logging
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.routes import vibe
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
 
 app = FastAPI(
     title="Mosaic Vibe Detection",
@@ -24,6 +32,14 @@ app.add_middleware(
 )
 
 app.include_router(vibe.router, prefix="/api/vibe", tags=["vibe"])
+
+# Serve the test frontend
+static_dir = Path(__file__).parent.parent / "static"
+
+
+@app.get("/")
+async def serve_frontend() -> FileResponse:
+    return FileResponse(static_dir / "index.html")
 
 # Serve the test frontend
 static_dir = Path(__file__).parent.parent / "static"
