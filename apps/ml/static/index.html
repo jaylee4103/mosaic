@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mosaic Vibe Detector — Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #fafafa;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+        }
+        h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .subtitle { color: #71717a; font-size: 0.875rem; margin-bottom: 2rem; }
+        .upload-zone {
+            border: 2px dashed #3f3f46;
+            border-radius: 12px;
+            padding: 3rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            width: 100%;
+            max-width: 480px;
+        }
+        .upload-zone:hover, .upload-zone.dragover { border-color: #8b5cf6; }
+        .upload-zone input { display: none; }
+        .upload-zone p { color: #a1a1aa; margin-top: 0.5rem; }
+        .preview-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            justify-content: center;
+        }
+        .preview-grid img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin: 1.5rem 0;
+            align-items: center;
+        }
+        .controls label { color: #a1a1aa; font-size: 0.875rem; }
+        .controls select {
+            background: #18181b;
+            color: #fafafa;
+            border: 1px solid #3f3f46;
+            border-radius: 6px;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        button {
+            background: #8b5cf6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 2rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #7c3aed; }
+        button:disabled { background: #3f3f46; cursor: not-allowed; }
+        .result {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: #18181b;
+            border-radius: 12px;
+            max-width: 480px;
+            width: 100%;
+            display: none;
+        }
+        .result.show { display: block; }
+        .result h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #8b5cf6; }
+        .result .phrase {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        .result .facets {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .result .facet {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0.75rem;
+            background: #0a0a0a;
+            border-radius: 6px;
+        }
+        .result .facet .label { color: #71717a; }
+        .result .facet .value { color: #fafafa; font-weight: 500; }
+        .result .meta {
+            margin-top: 1rem;
+            font-size: 0.75rem;
+            color: #71717a;
+            display: flex;
+            gap: 1rem;
+        }
+        .error {
+            color: #ef4444;
+            font-size: 0.875rem;
+            margin-top: 1rem;
+        }
+        .loading {
+            color: #8b5cf6;
+            font-size: 0.875rem;
+            margin-top: 1rem;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mosaic Vibe Detector</h1>
+    <p class="subtitle">Upload images to detect their vibe</p>
+
+    <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" multiple accept="image/*">
+        <p><strong>Click to upload</strong> or drag and drop</p>
+        <p>PNG, JPG up to 10MB each</p>
+        <div class="preview-grid" id="previewGrid"></div>
+    </div>
+
+    <div class="controls">
+        <label for="mode">Mode:</label>
+        <select id="mode">
+            <option value="intra">Intra-domain (describe vibe)</option>
+            <option value="cross">Cross-domain (recommend)</option>
+        </select>
+        <label for="domain">Target:</label>
+        <select id="domain">
+            <option value="">Auto-route</option>
+            <option value="outfit">Outfit</option>
+            <option value="home_goods">Home Goods</option>
+            <option value="music">Music</option>
+            <option value="art">Art</option>
+        </select>
+    </div>
+
+    <button id="analyzeBtn" disabled>Analyze</button>
+
+    <div class="loading" id="loading">Analyzing...</div>
+    <div class="error" id="error"></div>
+
+    <div class="result" id="result">
+        <h2>Detected Vibe</h2>
+        <div class="phrase" id="phrase"></div>
+        <div class="facets" id="facets"></div>
+        <div class="meta" id="meta"></div>
+    </div>
+
+    <script>
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const previewGrid = document.getElementById('previewGrid');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const modeSelect = document.getElementById('mode');
+        const domainSelect = document.getElementById('domain');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const result = document.getElementById('result');
+        const phrase = document.getElementById('phrase');
+        const facets = document.getElementById('facets');
+        const meta = document.getElementById('meta');
+
+        let files = [];
+
+        uploadZone.addEventListener('click', () => fileInput.click());
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        function handleFiles(fileList) {
+            files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+            previewGrid.innerHTML = '';
+            files.forEach(f => {
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(f);
+                previewGrid.appendChild(img);
+            });
+            analyzeBtn.disabled = files.length === 0;
+            error.textContent = '';
+            result.classList.remove('show');
+        }
+
+        analyzeBtn.addEventListener('click', async () => {
+            if (files.length === 0) return;
+
+            const formData = new FormData();
+            files.forEach(f => formData.append('files', f));
+            formData.append('mode', modeSelect.value);
+            if (domainSelect.value) formData.append('target_domain', domainSelect.value);
+
+            loading.style.display = 'block';
+            error.textContent = '';
+            result.classList.remove('show');
+            analyzeBtn.disabled = true;
+
+            try {
+                const res = await fetch('http://localhost:8000/api/vibe/analyze', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.detail || 'Analysis failed');
+
+                const vibe = data.vibe;
+                phrase.textContent = vibe.phrase || '(no phrase)';
+                facets.innerHTML = '';
+                const facetEntries = Object.entries(vibe.facets || {}).filter(([k, v]) => k !== 'confidence' && v);
+                facetEntries.forEach(([k, v]) => {
+                    const div = document.createElement('div');
+                    div.className = 'facet';
+                    div.innerHTML = `<span class="label">${k.replace(/_/g, ' ')}</span><span class="value">${v}</span>`;
+                    facets.appendChild(div);
+                });
+                meta.innerHTML = `
+                    <span>Confidence: ${(vibe.confidence * 100).toFixed(0)}%</span>
+                    <span>Mixed: ${vibe.mixed ? 'Yes' : 'No'}</span>
+                    ${vibe.target_domain ? `<span>Domain: ${vibe.target_domain}</span>` : ''}
+                `;
+                result.classList.add('show');
+            } catch (err) {
+                error.textContent = err.message;
+            } finally {
+                loading.style.display = 'none';
+                analyzeBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

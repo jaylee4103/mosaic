@@ -54,7 +54,15 @@ class EmbeddingService:
         inputs = self._processor(images=image, return_tensors="pt").to(self.device)
 
         with torch.no_grad():
-            features = self._model.get_image_features(**inputs)
+            output = self._model.get_image_features(**inputs)
+
+        # Extract tensor from model output (handles both raw tensors and model output objects)
+        if hasattr(output, "pooler_output"):
+            features = output.pooler_output
+        elif hasattr(output, "last_hidden_state"):
+            features = output.last_hidden_state[:, 0, :]
+        else:
+            features = output
 
         # Normalize to unit vector for cosine similarity
         features = features / features.norm(dim=-1, keepdim=True)
@@ -122,7 +130,26 @@ class EmbeddingService:
             batch = texts[i : i + batch_size]
             inputs = self._processor(text=batch, return_tensors="pt", padding=True, truncation=True).to(self.device)
             with torch.no_grad():
-                features = self._model.get_text_features(**inputs)
+                output = self._model.get_text_features(**inputs)
+
+            # Extract tensor from model output
+            if hasattr(output, "pooler_output"):
+                features = output.pooler_output
+            elif hasattr(output, "last_hidden_state"):
+                features = output.last_hidden_state[:, 0, :]
+            else:
+                features = output
+
+                output = self._model.get_text_features(**inputs)
+
+            # Extract tensor from model output
+            if hasattr(output, "pooler_output"):
+                features = output.pooler_output
+            elif hasattr(output, "last_hidden_state"):
+                features = output.last_hidden_state[:, 0, :]
+            else:
+                features = output
+
             features = features / features.norm(dim=-1, keepdim=True)
             all_embeddings.extend(features.cpu().tolist())
         return all_embeddings
