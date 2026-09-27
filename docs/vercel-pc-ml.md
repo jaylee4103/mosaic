@@ -43,7 +43,7 @@ To expose browser-assisted checkout proof, start its separate service and Quick 
 ```powershell
 docker compose --profile browser up --build -d browser
 docker compose --profile browser --profile browser-tunnel up -d browser-tunnel
-docker compose logs --tail=100 browser-tunnel
+docker compose --profile browser --profile browser-tunnel logs --tail=100 browser-tunnel
 ```
 
 Copy only the **browser tunnel's** `https://....trycloudflare.com` URL into Vercel as `BROWSER_SERVICE_URL`. It differs from the ML tunnel URL. Unauthenticated checkout requests must return `401`; the browser service accepts only the private `BROWSER_SERVICE_TOKEN` from Next.js. Its `/health` endpoint remains public for checks. Stop public browser access with `docker compose --profile browser --profile browser-tunnel stop browser-tunnel`.
