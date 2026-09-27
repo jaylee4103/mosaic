@@ -2,6 +2,9 @@
 
 import io
 import logging
+import os
+import resource
+import sys
 
 import torch
 from PIL import Image
@@ -10,6 +13,34 @@ from transformers import AutoModel, AutoProcessor
 from app.models.facets import FACET_VOCABULARIES, FacetProfile
 
 logger = logging.getLogger(__name__)
+
+
+def _rss_mb() -> float:
+    """Current process resident memory in MB.
+
+    ru_maxrss is bytes on macOS/BSD, KB on Linux — this service runs on
+    Railway (Linux), but keep it correct on macOS too since that's where
+    it gets tested locally.
+    """
+    raw = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return raw / (1024 * 1024) if sys.platform == "darwin" else raw / 1024
+
+
+def _log_mem(stage: str) -> None:
+    logger.info("[mem] %s: RSS=%.1fMB", stage, _rss_mb())
+
+
+def _hf_cache_size_mb() -> float:
+    """Total size of the HuggingFace hub cache (downloaded model weights)."""
+    cache_dir = os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
+    total = 0
+    for root, _, files in os.walk(cache_dir):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total / (1024 * 1024)
 
 DEFAULT_MODEL = "google/siglip2-base-patch16-224"
 PROMPT_TEMPLATE = "This is a photo of {tag}."
@@ -55,19 +86,43 @@ class EmbeddingService:
     def _load(self) -> None:
         if self._model is not None:
             return
+        _log_mem("before model load")
         logger.info("Loading SigLIP2 model: %s on %s", self.model_name, self.device)
+
         self._processor = AutoProcessor.from_pretrained(self.model_name)
-        self._model = AutoModel.from_pretrained(self.model_name, low_cpu_mem_usage=True).to(self.device).eval()
-        self._logit_scale = self._model.logit_scale
-        self._logit_bias = self._model.logit_bias
-        logger.info("SigLIP2 model loaded. logit_scale=%.4f, logit_bias=%.4f",
-                    float(self._logit_scale.detach()), float(self._logit_bias.detach()))
+        _log_mem("after processor load")
+
+        # bfloat16 halves weight memory vs the default FP32 (~700-900MB for
+        # this model) without the CPU kernel-support gaps float16 has.
+        # low_cpu_mem_usage avoids allocating a full FP32 copy during
+        # loading before downcasting — without it, peak memory during
+        # from_pretrained can briefly exceed the final resident size.
+        self._model = (
+            AutoModel.from_pretrained(self.model_name, low_cpu_mem_usage=True, dtype=torch.bfloat16)
+            .to(self.device)
+            .eval()
+        )
+        # Cast to float32 explicitly rather than relying on implicit
+        # bf16/fp32 type promotion in the downstream cosine-similarity math.
+        self._logit_scale = self._model.logit_scale.float()
+        self._logit_bias = self._model.logit_bias.float()
+
+        param_bytes = sum(p.numel() * p.element_size() for p in self._model.parameters())
+        logger.info(
+            "SigLIP2 model loaded. logit_scale=%.4f, logit_bias=%.4f, params=%.1fMB, hf_cache=%.1fMB",
+            float(self._logit_scale.detach()), float(self._logit_bias.detach()),
+            param_bytes / (1024 * 1024), _hf_cache_size_mb(),
+        )
+        _log_mem("after model load")
 
     async def embed_image(self, image_bytes: bytes) -> list[float]:
         """Embed a single image into a feature vector."""
         self._load()
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         inputs = self._processor(images=image, return_tensors="pt").to(self.device)
+        # pixel_values comes back FP32 from the processor; the model's
+        # weights are bfloat16 (see _load), so the input must match dtype.
+        inputs["pixel_values"] = inputs["pixel_values"].to(self._model.dtype)
         with torch.no_grad():
             output = self._model.get_image_features(**inputs)
         if hasattr(output, "pooler_output"):
@@ -76,6 +131,7 @@ class EmbeddingService:
             features = output.last_hidden_state[:, 0, :]
         else:
             features = output
+        features = features.float()
         features = features / features.norm(dim=-1, keepdim=True)
         return features.squeeze().cpu().tolist()
 
@@ -174,6 +230,7 @@ class EmbeddingService:
                 features = output.last_hidden_state[:, 0, :]
             else:
                 features = output
+            features = features.float()
             features = features / features.norm(dim=-1, keepdim=True)
             all_embeddings.extend(features.cpu().tolist())
         return all_embeddings
