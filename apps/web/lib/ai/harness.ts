@@ -16,6 +16,7 @@ export type AgentTurnResult = {
 }
 
 const DEFAULT_MAX_STEPS = 8
+const MAX_OUTPUT_TOKENS = Number(process.env.AGENT_MAX_OUTPUT_TOKENS ?? 2048)
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResult> {
   const toolNames = Object.keys(input.tools)
@@ -25,6 +26,7 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
 
   const result = await generateText({
     model: input.model,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
     system: input.system,
     messages: input.messages,
     tools: input.tools,
@@ -64,6 +66,7 @@ export async function* runAgentTurnStream(input: AgentTurnInput): AsyncGenerator
 
   const result = streamText({
     model: input.model,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
     system: input.system,
     messages: input.messages,
     tools: input.tools,

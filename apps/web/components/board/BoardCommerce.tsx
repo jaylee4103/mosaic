@@ -35,7 +35,7 @@ const LOADING_WORDS = [
   "Hot on the trail", "Chasing the drip", "Securing the bag", "Bet, searching",
 ];
 const TOOL_LABELS: Record<string, string> = {
-  search_products: "Searching the catalog",
+  search_products: "Searching shopping sites",
   browse_webpage: "Reading a product page",
   browse_summary: "Skimming a product page",
   run_merchant_checkout: "Walking through checkout",
@@ -384,7 +384,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
           <input id="shopping-message" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="What would you like to find?" className="min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-4 py-3 text-sm outline-none focus:border-stone-500" />
           <button type="submit" disabled={loading || Boolean(busy) || !query.trim() || cart?.status !== "open"} className="rounded-xl bg-stone-900 px-5 py-3 text-sm font-medium text-white disabled:opacity-40">{busy === "shop" ? "Shopping…" : "Send"}</button>
         </form>
-        <p className="mt-2 text-xs text-stone-500">Mosaic chooses from the demo catalog. You can still adjust or remove items in your cart.</p>
+        <p className="mt-2 text-xs text-stone-500">Mosaic searches shopping sites for products that fit this board. You can adjust or remove items in your cart.</p>
       </section>
 
       <aside aria-label="Cart and checkout" className="min-w-0 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
