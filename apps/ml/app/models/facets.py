@@ -1,79 +1,213 @@
-"""Facet vocabulary banks and the facet profile model."""
+"""Unified facet vocabulary banks for domain-agnostic vibe detection."""
 
 from pydantic import BaseModel, Field
 
-# Curated vocabulary banks per facet — mined from design taxonomies,
-# Pinterest board titles, and aesthetic hashtags as weak labels.
-# Expand based on user uploads and domain coverage needs.
-
+# Single unified vocabulary for all facets.
+# color is populated from classical CV (k-means + perceptual names), not zero-shot.
 FACET_VOCABULARIES: dict[str, list[str]] = {
-    "style_archetype": [
-        "midcentury", "scandi", "industrial", "boho", "farmhouse",
-        "japandi", "coastal", "art_deco", "bohemian", "minimalist",
-        "rustic", "traditional", "transitional", "contemporary", "cottagecore",
+    "style": [
+        "midcentury",
+        "scandi",
+        "industrial",
+        "boho",
+        "farmhouse",
+        "japandi",
+        "art_deco",
+        "minimalist",
+        "traditional",
+        "transitional",
+        "contemporary",
+        "cottagecore",
+        "outdoorsy",
+        "gorpcore",
+        "nautical",
+        "safari",
+        "western",
+        "streetwear",
+        "grunge",
+        "punk",
+        "gothic",
+        "glam",
+        "preppy",
+        "dark_academia",
+        "y2k",
+        "tropical",
+        "coquette",
+        "old_money",
+        "witchy",
+        "vaporwave",
+        "cyberpunk",
+        "indie_sleaze",
+        "balletcore",
+        "fairycore",
+        "mermaidcore",
+        "e_girl",
+        "clean_girl",
+        "light_academia",
+        "goblincore",
+        "dreamcore",
+        "angelcore",
+        "barbiecore",
+        "normcore",
+        "cabincore",
+        "cluttercore",
+        "regencycore",
+        "tenniscore",
+    ],
+    # Natural landscape / biome — distinct from "style" so a mountain photo
+    # isn't forced to compete against interior-design and subculture labels.
+    "terrain": [
+        "desert",
+        "tundra",
+        "rainforest",
+        "savanna",
+        "canyon",
+        "glacier",
+        "volcanic",
+        "woodland",
+        "wetland",
+        "highland",
+        "dune",
+        "fjord",
+        "meadow",
+        "alpine",
+        "coastal",
+    ],
+    # Built environment / civic setting.
+    "locale": [
+        "skyline",
+        "downtown",
+        "suburban",
+        "urban",
+        "park",
+        "plaza",
+        "boardwalk",
+        "promenade",
+        "courtyard",
+        "rooftop",
+        "metropolitan",
+        "historic_district",
+        "waterfront",
+        "garden",
+        "botanical",
+    ],
+    "shape": [
+        "rounded",
+        "angular",
+        "curved",
+        "boxy",
+        "sculptural",
+        "oversized",
+        "compact",
+        "asymmetric",
+        "symmetrical",
+        "fluid",
+        "chunky",
+        "sleek",
+        "bulky",
+        "geometric",
     ],
     "material": [
-        "wood", "rattan", "brass", "linen", "concrete",
-        "velvet", "marble", "wicker", "leather", "ceramic",
-        "glass", "steel", "bamboo", "terrazzo", "rattan",
+        "wood",
+        "rattan",
+        "brass",
+        "linen",
+        "concrete",
+        "velvet",
+        "marble",
+        "wicker",
+        "leather",
+        "ceramic",
+        "glass",
+        "steel",
+        "bamboo",
+        "terrazzo",
+        "stone",
+        "granite",
+        "slate",
+        "fur",
+        "wool",
+        "flannel",
+        "canvas",
+        "denim",
+        "cork",
+        "cotton",
+        "silk",
+        "suede",
+        "gold",
+        "copper",
+        "clay",
+        "paper",
     ],
-    "color_tone": [
-        "warm", "muted", "terracotta", "cool", "monochrome",
-        "earth_tone", "pastel", "jewel_tone", "neutral", "black_and_white",
-        "sage_green", "dusty_rose", "navy", "cream", "charcoal",
-    ],
-    "era_mood": [
-        "vintage", "modern", "rustic", "minimal", "retro",
-        "timeless", "eclectic", "zen", "moody", "airy",
-    ],
-}
-
-# Domain-agnostic facets for cross-domain bridging (vibe interlingua)
-DOMAIN_AGNOSTIC_FACETS: dict[str, list[str]] = {
-    "color_palette": [
-        "warm earth tones", "cool blues", "muted neutrals", "jewel tones",
-        "pastel", "monochrome", "black and white", "vibrant primaries",
-    ],
-    "texture_quality": [
-        "rugged", "smooth", "weathered", "soft", "glossy",
-        "matte", "rough", "polished", "natural", "synthetic",
-    ],
-    "light_quality": [
-        "crisp", "hazy", "golden", "overcast", "dramatic",
-        "diffused", "backlit", "moody", "bright", "low_key",
-    ],
-    "energy_mood": [
-        "calm", "dramatic", "austere", "cozy", "energetic",
-        "serene", "intense", "playful", "melancholic", "uplifting",
-    ],
-    "density_complexity": [
-        "sparse", "layered", "busy", "balanced", "cluttered",
-        "open", "dense", "structured", "organic", "geometric",
+    "quality": [
+        "cozy",
+        "serene",
+        "dramatic",
+        "energetic",
+        "moody",
+        "airy",
+        "eclectic",
+        "rugged",
+        "polished",
+        "organic",
+        "structured",
+        "layered",
+        "sparse",
+        "minimal",
+        "wild",
+        "crisp",
+        "misty",
+        "weathered",
+        "raw",
+        "pristine",
+        "vibrant",
+        "somber",
+        "ethereal",
+        "gritty",
+        "nostalgic",
+        "futuristic",
+        "earthy",
+        "lush",
+        "barren",
+        "tranquil",
+        "vast",
+        "whimsical",
+        "golden",
+        "icy",
+        "arctic",
+        "oceanic",
+        "sunset",
+        "sky",
+        "windswept",
+        "craggy",
+        "verdant",
+        "arid",
+        "humid",
+        "panoramic",
+        "remote",
+        "untouched",
+        "overcast",
+        "foggy",
     ],
 }
 
 
 class FacetProfile(BaseModel):
-    """Structured facet values for a set of images."""
+    """Structured facet values for a set of images.
 
-    style_archetype: str | None = None
-    material: str | None = None
-    color_tone: str | None = None
-    era_mood: str | None = None
+    Each facet holds a ranked top-k list of tags rather than a single winner,
+    so a forced single choice doesn't drown out real ambiguity in the image
+    (e.g. a scene that's plausibly both "moody" and "serene").
+    """
 
-    # Domain-agnostic facets (for cross-domain bridging)
-    color_palette: str | None = None
-    texture_quality: str | None = None
-    light_quality: str | None = None
-    energy_mood: str | None = None
-    density_complexity: str | None = None
+    style: list[str] = Field(default_factory=list)
+    terrain: list[str] = Field(default_factory=list)
+    locale: list[str] = Field(default_factory=list)
+    material: list[str] = Field(default_factory=list)
+    color: list[str] = Field(default_factory=list)
+    quality: list[str] = Field(default_factory=list)
+    shape: list[str] = Field(default_factory=list)
 
-    # Confidence per facet (0-1)
-    confidence: dict[str, float] = Field(default_factory=dict)
-
-    def surviving_facets(self) -> dict[str, str]:
-        """Return only facets that have a value (not dropped as uncertain)."""
-        return {
-            k: v for k, v in self.model_dump().items()
-            if v is not None and k != "confidence"
-        }
+    def surviving_facets(self) -> dict[str, list[str]]:
+        """Return only facets that have at least one surviving value."""
+        return {k: v for k, v in self.model_dump().items() if v}

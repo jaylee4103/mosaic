@@ -67,6 +67,19 @@ The same aesthetic can drive searches for:
 - Travel products
 - Anything else the user asks for
 
+A board is not required to look like a mood board at all. A board containing mountains, trees, lakes, snow, and rocks might become:
+
+**Wooded Alpine**
+
+- Slate gray, moss green, and bark brown
+- Wool, flannel, canvas, and raw wood
+- Rugged textures
+- Layered silhouettes
+- Natural and gorpcore
+- Outdoorsy influence
+
+Nothing in the source photos is a product, and nothing in them is furniture or clothing. The profile still transfers the same way — the user can later ask for an outfit, a room, or a poster, and Mosaic applies **Wooded Alpine** to whichever category is requested.
+
 ## End-to-end system
 
 ```mermaid
@@ -165,9 +178,13 @@ For example:
 
 > “I like the colors and textures in this image, not the actual furniture.”
 
+The images do not need to depict interiors, furniture, or fashion at all. A board of mountains, trees, lakes, snow, and rocks is a valid input — Mosaic should read that as an **outdoorsy / gorpcore / natural / wooded** vibe, not fail to produce a profile because nothing in the photos is a "product." The user decides afterward what category that vibe applies to (an outfit, a room, a poster, anything).
+
 ### 3. Understand
 
 Mosaic sends the board to a multimodal model and requests a structured aesthetic representation.
+
+Each facet returns a ranked list of descriptors, not a single forced label. A board rarely reduces to exactly one color, one material, or one mood — returning the top few candidates per facet keeps real ambiguity (a room that's plausibly both "warm" and "minimal") instead of discarding it.
 
 Example:
 
@@ -186,6 +203,14 @@ Example:
     "wood",
     "ceramic",
     "rattan"
+  ],
+  "styles": [
+    "coastal",
+    "minimalist"
+  ],
+  "shapes": [
+    "rounded",
+    "fluid"
   ],
   "qualities": [
     "warm",

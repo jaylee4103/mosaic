@@ -62,13 +62,13 @@ mosaic/
 When creating a new branch, use the following naming convention:
 
 ```
-vyang/<conventional-commit-type>-<short-description>
+[username]/<conventional-commit-type>-<short-description>
 ```
 
 Examples:
-- `vyang/feat-add-authentication`
-- `vyang/fix-login-redirect`
-- `vyang/chore-update-dependencies`
-- `vyang/docs-update-readme`
+- `[username]/feat-add-authentication`
+- `[username]/fix-login-redirect`
+- `[username]/chore-update-dependencies`
+- `[username]/docs-update-readme`
 
 The conventional commit types are: `feat`, `fix`, `chore`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `revert`.
