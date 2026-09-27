@@ -22,3 +22,26 @@ Mosaic has no sign-in screen. A guest receives a random 256-bit token in an Http
 All tables use row level security and deny direct browser-role access. The server secret key bypasses row level security, so every API route must resolve the guest cookie and scope its checkout query to that guest. The board image upload handlers (`apps/web/lib/server/board-images.ts`) write to `<guest-id>/<board-id>/<image-id>` paths and return short-lived (1 hour) signed URLs after checking board ownership; see `../docs/board-commerce-api.md` for the full board and image API contract.
 
 The durable `demo_checkout_sessions` table is for the fixed two-store test fixture. It does not replace the catalog, cart, or order tables needed for the full Mosaic product.
+
+## CI: automatic migrations on merge to main
+
+`.github/workflows/supabase-migrations.yml` runs `supabase db push` against the hosted project whenever a merge to `main` touches `supabase/migrations/**`.
+
+**Required repo secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | A personal access token from https://supabase.com/dashboard/account/tokens |
+| `SUPABASE_PROJECT_REF` | `qptyjlfydloegovtfhkb` |
+| `SUPABASE_DB_PASSWORD` | The project's Postgres password (Project Settings → Database) |
+
+**One-time baseline required before this workflow is safe to run**: the six migrations already applied through the SQL Editor (see above) were never recorded in the CLI's migration-history table (`supabase_migrations.schema_migrations`). Running `supabase db push` as-is would try to re-apply all six and fail on `already exists` errors. Before merging anything that triggers this workflow, run once, locally, against this project:
+
+```bash
+supabase link --project-ref qptyjlfydloegovtfhkb
+supabase migration repair --status applied \
+  202609260001 202609260002 202609260003 \
+  202609270001 202609270002 202609270003
+```
+
+`migration repair` only marks these versions as applied in the history table — it does not run their SQL again. After that, `supabase db push` (and this workflow) will only apply migrations newer than `202609270003`.
