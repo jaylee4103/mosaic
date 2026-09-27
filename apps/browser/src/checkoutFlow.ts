@@ -1,4 +1,4 @@
-import type { Page } from 'playwright'
+import type { Locator, Page } from 'playwright'
 import { getBrowser } from './browserInstance'
 import { isCaptchaPage, isPaymentGate } from './checkoutGate'
 import { decideNextAction } from './navigatorAgent'
@@ -26,6 +26,41 @@ async function screenshotPage(page: Page): Promise<string> {
   return buffer.toString('base64')
 }
 
+async function selectValue(page: Page, target: Locator, value: string): Promise<void> {
+  const tagName = await target.evaluate((element) => element.tagName.toLowerCase())
+  if (tagName === 'select') {
+    await target.selectOption({ label: value }, { timeout: STEP_TIMEOUT_MS }).catch(() =>
+      target.selectOption(value, { timeout: STEP_TIMEOUT_MS }),
+    )
+    return
+  }
+
+  const role = await target.getAttribute('role')
+  const label = (await target.innerText().catch(() => '')).trim()
+  if (['option', 'radio', 'menuitemradio'].includes(role ?? '') || label === value) {
+    await target.click({ timeout: STEP_TIMEOUT_MS })
+    return
+  }
+
+  // Custom selectors need two clicks: open the chooser, then pick the value.
+  await target.click({ timeout: STEP_TIMEOUT_MS })
+  const options = [
+    page.getByRole('option', { name: value, exact: true }),
+    page.getByRole('radio', { name: value, exact: true }),
+    page.getByRole('menuitemradio', { name: value, exact: true }),
+    page.getByRole('button', { name: value, exact: true }),
+    page.getByText(value, { exact: true }),
+  ]
+  for (const option of options) {
+    const visibleOption = option.filter({ visible: true }).first()
+    if (await visibleOption.waitFor({ state: 'visible', timeout: 800 }).then(() => true).catch(() => false)) {
+      await visibleOption.click({ timeout: STEP_TIMEOUT_MS })
+      return
+    }
+  }
+  throw new Error(`No visible option ${JSON.stringify(value)} after opening selector`)
+}
+
 function gateResult(page: Page, steps: CheckoutStep[], detail: string): Promise<CheckoutFlowResult> {
   steps.push({ step: 'gate_check', success: true, url: page.url(), detail })
   return screenshotPage(page).then((screenshotBase64) => ({
@@ -40,6 +75,7 @@ function gateResult(page: Page, steps: CheckoutStep[], detail: string): Promise<
 
 export async function runCheckoutFlow(options: CheckoutFlowOptions): Promise<CheckoutFlowResult> {
   const steps: CheckoutStep[] = []
+  const attempts = new Map<string, number>()
   const hints = [...(options.addToCartSelectors ?? []), ...(options.checkoutSelectors ?? [])]
 
   console.log(`[checkout-flow] starting: url=${options.productUrl} quantity=${options.quantity ?? 1} hints=${hints.length}`)
@@ -75,13 +111,18 @@ export async function runCheckoutFlow(options: CheckoutFlowOptions): Promise<Che
       if (decision.action === 'stuck') throw new FlowStop('stuck', decision.reasoning)
       if (!decision.ref) throw new FlowStop('stuck', `Model chose ${decision.action} with no target ref`)
 
+      const actionKey = `${page.url()}|${decision.action}|${decision.ref}|${decision.value ?? ''}`
+      const attemptCount = attempts.get(actionKey) ?? 0
+      if (attemptCount >= 2) throw new FlowStop('stuck', `Repeated ${decision.action} on ${decision.ref} without reaching checkout`)
+      attempts.set(actionKey, attemptCount + 1)
+
       const target = page.locator(`aria-ref=${decision.ref}`)
       try {
         if (decision.action === 'click') {
           await target.click({ timeout: STEP_TIMEOUT_MS })
         } else if (decision.action === 'select') {
           if (decision.value === undefined) throw new Error('select action missing a value')
-          await target.selectOption(decision.value, { timeout: STEP_TIMEOUT_MS }).catch(() => target.click({ timeout: STEP_TIMEOUT_MS }))
+          await selectValue(page, target, decision.value)
         } else if (decision.action === 'fill') {
           if (decision.value === undefined) throw new Error('fill action missing a value')
           await target.fill(decision.value, { timeout: STEP_TIMEOUT_MS })
@@ -94,8 +135,17 @@ export async function runCheckoutFlow(options: CheckoutFlowOptions): Promise<Che
       }
 
       await page.waitForLoadState('domcontentloaded', { timeout: STEP_TIMEOUT_MS }).catch(() => {})
+      // Storefronts often keep a loading overlay up while a cart or checkout
+      // click finishes in the background. Do not inspect or screenshot it yet.
+      if (decision.action === 'click') {
+        await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {})
+      }
       await page.waitForTimeout(500)
     }
+
+    // The final action can land on the payment page after the last loop check.
+    await guardAgainstGates(page)
+    if (await isPaymentGate(page)) return await gateResult(page, steps, 'payment gate detected')
 
     // Exhausted the step budget without reaching a gate — return the last
     // page reached as best-effort proof rather than a hard error.
