@@ -28,3 +28,15 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 package = false
+
+# This service runs CPU-only inference (Railway, no GPU). The default PyPI
+# torch wheel bundles CUDA runtime libraries that are never used here and
+# roughly quadruple install size/memory footprint on a memory-constrained
+# instance. Force resolution from the CPU-only wheel index instead.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
