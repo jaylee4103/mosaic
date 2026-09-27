@@ -58,7 +58,7 @@ export function createShoppingTools(
 
   return {
     search_products: tool({
-      description: `Search the product catalog by query, category, and max price. Returns up to ${CANDIDATE_POOL_SIZE} close matches — use this to find a productId before adding it to the cart.`,
+      description: `Search the product catalog by query, category, and max price. Returns up to ${CANDIDATE_POOL_SIZE} close matches withwith product URLs you can visit. Use productUrl to click through to the retailer's website. Useproduct URLs you can visit. Use productUrl to click through to the retailer's website. Use this to find a productId before adding it to the cart.`,
       inputSchema: z.object({
         query: z.string().optional().describe('Free-text search, e.g. "desk lamp"'),
         category: z.string().optional(),
@@ -91,6 +91,8 @@ export function createShoppingTools(
           priceCents: p.priceCents,
           category: p.category,
           description: p.description,
+          productUrl: p.productUrl,
+          imageUrl: p.imageUrl,
         }))
       }),
     }),
