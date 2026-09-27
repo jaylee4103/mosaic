@@ -59,4 +59,4 @@ The board checkout routes use the saved cart and its product price snapshot. By 
 
 For a new database, apply `202609260003_checkout_payment_method.sql` before running the board checkout routes. It records the actual Stripe payment method and whether Link was verified. A paid card transaction is reported as paid with `linkVerified: false`.
 
-This is a two-store test fixture. Product search, merchant catalog ingestion, real retailer order placement, fulfillment, and a single charge covering unrelated stores still require separate integrations. The current UI is not wired to these endpoints.
+This is a two-store test fixture. The board UI uses the board, image, vibe-analysis, product-search, and add-to-cart endpoints. Checkout screens and conversational cart editing are not wired yet. Merchant catalog ingestion, real retailer order placement, fulfillment, and a single charge covering unrelated stores still require separate integrations. A completed two-store Next API sandbox run is recorded in `../../docs/checkout-sandbox-verification.md`.

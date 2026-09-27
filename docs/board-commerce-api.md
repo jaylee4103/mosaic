@@ -40,12 +40,12 @@ Response `200`:
   ],
   "vibeProfile": {
     "name": "Sun-Washed Mediterranean", "description": null,
-    "profile": { "phrase": "Sun-Washed Mediterranean", "facets": { "...": "..." }, "confidence": 0.83, "mixed": false, "target_domain": null, "message": null },
+    "profile": { "phrase": "Sun-Washed Mediterranean", "facets": { "color": ["terracotta", "cream"], "material": ["linen"] }, "mixed": false, "target_domain": null, "message": null },
     "updatedAt": "..."
   }
 }
 ```
-`vibeProfile` is `null` until AI writes one via `PUT /api/boards/:boardId/vibe-profile` (see below for the real shape). `images[].url` is a signed URL valid for 1 hour — re-fetch the board to refresh it; never persist or share it long-term.
+`vibeProfile` is `null` until analysis writes one through `POST /api/boards/:boardId/analyze` or a caller saves one through `PUT /api/boards/:boardId/vibe-profile`. `images[].url` is a signed URL valid for 1 hour — re-fetch the board to refresh it; never persist or share it long-term.
 `404 { "code": "NOT_FOUND" }` if the board doesn't exist or belongs to another guest.
 
 ### `PATCH /api/boards/:boardId`
@@ -71,12 +71,12 @@ Removes the storage object and the row. Response `200 { "ok": true }`.
 
 ## Vibe profile
 
-Backend does not define the shape of a vibe profile — it stores and returns exactly what `apps/ml`'s `VibeResult` produces (`apps/ml/app/models/vibe.py`), keys as-is (snake_case included). If AI changes that model's fields, no Backend change is required; the new fields just flow through.
+Backend stores and returns the `VibeResult` from `apps/ml/app/models/vibe.py` without reshaping it. The analysis bridge checks that `phrase` is a string, `facets` is an object, and `mixed` is a boolean before saving. Changes to those required fields need a matching bridge update.
 
 ### `POST /api/boards/:boardId/analyze`
 Reads the current guest's private board images, sends them to `apps/ml`'s `POST /api/vibe/analyze`, and saves the returned vibe profile. Call this after the user finishes uploading or changing images. The Next server needs `ML_SERVICE_URL` set to the ML service origin (for example `http://127.0.0.1:8000`). Request body is empty. Response `200`:
 ```json
-{ "vibeProfile": { "name": "Sun-Washed Mediterranean", "description": null, "profile": { "phrase": "Sun-Washed Mediterranean", "facets": {} }, "updatedAt": "..." } }
+{ "vibeProfile": { "name": "Sun-Washed Mediterranean", "description": null, "profile": { "phrase": "Sun-Washed Mediterranean", "facets": { "color": ["terracotta", "cream"], "material": ["linen"] }, "mixed": false, "target_domain": null, "message": null }, "updatedAt": "..." } }
 ```
 An empty board returns `400 VALIDATION`; an unreachable or invalid ML response returns `503 ML_UNAVAILABLE`. If images or notes change during analysis, the endpoint returns `409 BOARD_CHANGED` instead of saving a stale result. The ML service currently analyzes image pixels; image notes are stored on the board but are not yet part of its analysis model.
 
@@ -89,12 +89,10 @@ Response `200`:
   "profile": {
     "phrase": "Sun-Washed Mediterranean",
     "facets": {
-      "style_archetype": "coastal", "material": "linen", "color_tone": "warm", "era_mood": "timeless",
-      "color_palette": "warm earth tones", "texture_quality": "natural", "light_quality": "golden",
-      "energy_mood": "calm", "density_complexity": "balanced",
-      "confidence": { "style_archetype": 0.82, "material": 0.71 }
+      "style": ["coastal"], "material": ["linen"], "color": ["terracotta", "cream"],
+      "quality": ["natural", "calm"]
     },
-    "confidence": 0.83, "mixed": false, "target_domain": null, "message": null
+    "mixed": false, "target_domain": null, "message": null
   },
   "updatedAt": "..."
 }
@@ -102,7 +100,7 @@ Response `200`:
 `404 { "code": "NOT_FOUND" }` if the board has no saved vibe profile yet (or isn't yours).
 
 ### `PUT /api/boards/:boardId/vibe-profile`
-Request body: **exactly the `vibe` object from `apps/ml`'s `POST /api/vibe/analyze` response** (`{ phrase, facets, confidence, mixed, target_domain, message }`), forwarded unmodified. Upserts one profile per board. Response `200`, same shape as the `GET` above.
+Request body: **exactly the `vibe` object from `apps/ml`'s `POST /api/vibe/analyze` response** (`{ phrase, facets, mixed, target_domain, message }`), forwarded unmodified. Each facet is a ranked list of tags. Upserts one profile per board. Response `200`, same shape as the `GET` above.
 
 Backend only reads two fields out of the body for the `name`/`description` columns already required by the schema: `phrase` → `name` (empty string if absent), `message` → `description` (`null` if absent). Everything else — including `facets` — is stored verbatim in `profile` and is not validated or reshaped.
 
