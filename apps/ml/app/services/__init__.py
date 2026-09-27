@@ -1,1 +1,1 @@
-"""ML services — embedding, Jev client, aggregation."""
+"""ML services — embedding, Jev client, aggregation, browser."""
