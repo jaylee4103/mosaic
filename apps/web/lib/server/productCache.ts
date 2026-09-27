@@ -8,14 +8,12 @@ import { getSupabaseAdmin } from './supabase'
 import type { InternetProduct } from './internetSearch'
 import type { Product } from './products'
 
-function hashString(str: string): string {
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash
-  }
-  return `web-${Math.abs(hash).toString(36)}-${Buffer.from(str).toString('base64').slice(0, 8)}`
+function uid(): string {
+  return crypto.randomUUID()
+}
+
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, '-')
 }
 
 export async function cacheSearchResults(
@@ -28,24 +26,36 @@ export async function cacheSearchResults(
   let cached = 0
 
   for (const product of results) {
-    const productId = hashString(`${product.merchantName}-${product.title}`)
-    const merchantId = hashString(product.merchantName)
+    const productId = uid()
+    const merchantSlug = slugify(product.merchantName)
 
-    // Upsert merchant if it doesn't exist
+    // Upsert merchant by slug (unique constraint) to avoid duplicate key errors
     const { error: merchError } = await db
       .from('merchants')
       .upsert({
-        id: merchantId,
-        slug: product.merchantName.toLowerCase().replace(/\s+/g, '-'),
+        slug: merchantSlug,
         name: product.merchantName,
         checkout_method: 'browser' as const,
         active: true,
-      }, { onConflict: 'id' })
+      }, { onConflict: 'slug' })
       .select()
       .single()
 
     if (merchError) {
       console.warn(`[productCache] Could not upsert merchant ${product.merchantName}:`, merchError.message)
+      continue
+    }
+
+    // Get the merchant ID after upsert
+    const { data: merchantRow } = await db
+      .from('merchants')
+      .select('id')
+      .eq('slug', merchantSlug)
+      .maybeSingle()
+    const merchantId = (merchantRow as { id: string } | null)?.id
+    if (!merchantId) {
+      console.warn(`[productCache] Could not find merchant ID for ${product.merchantName}`)
+      continue
     }
 
     // Upsert product
@@ -54,7 +64,7 @@ export async function cacheSearchResults(
       .upsert({
         id: productId,
         merchant_id: merchantId,
-        external_id: `web-${query}-${product.title.slice(0, 50)}`,
+        external_id: `web-${uid()}`,
         name: product.title,
         description: `${product.category} from ${product.merchantName}`,
         category: product.category,

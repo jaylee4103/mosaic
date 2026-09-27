@@ -1,16 +1,17 @@
 /**
  * Serper.dev client for internet product search.
  * Calls Google Shopping via Serper API (POST to google.serper.dev/search).
- * Returns normalized product results.
+ * Parses organic results and normalizes to product shape.
  */
 const SERPER_API_KEY = process.env.SERPER_API_KEY
 
-interface SerperProduct {
+interface SerperOrganicResult {
   title: string
-  price: string
-  source: string
   link: string
-  image: string
+  snippet: string
+  rating?: number
+  ratingCount?: number
+  position: number
 }
 
 interface InternetProduct {
@@ -36,7 +37,6 @@ export async function searchInternet(
   try {
     const body: Record<string, unknown> = {
       q: query,
-      tbm: 'shop',
       num: 10,
       gl: 'us',
       hl: 'en',
@@ -62,21 +62,21 @@ export async function searchInternet(
     }
 
     const data = await response.json()
-    const shoppingResults = data.shopping as SerperProduct[]
+    const organicResults = data.organic as SerperOrganicResult[]
 
-    if (!shoppingResults || shoppingResults.length === 0) {
+    if (!organicResults || organicResults.length === 0) {
       console.log(`[internetSearch] No results for query: ${query}`)
       return []
     }
 
-    const products: InternetProduct[] = shoppingResults
-      .filter((item) => item.title && item.source)
+    const products: InternetProduct[] = organicResults
+      .filter((item) => item.title && item.link)
       .map((item) => ({
         title: item.title,
-        priceCents: parsePrice(item.price ?? '0'),
-        merchantName: item.source ?? 'Unknown',
-        productUrl: item.link ?? '',
-        imageUrl: item.image ?? '',
+        priceCents: parsePriceFromSnippet(item.snippet ?? ''),
+        merchantName: extractMerchant(item.link ?? ''),
+        productUrl: item.link,
+        imageUrl: '',
         category: category ?? inferCategory(query),
         query,
       }))
@@ -89,12 +89,32 @@ export async function searchInternet(
   }
 }
 
-function parsePrice(priceStr: string): number {
-  if (!priceStr || priceStr === '0') return 0
-  const cleaned = priceStr.replace(/[^0-9.]/g, '')
-  const dollars = parseFloat(cleaned)
-  if (isNaN(dollars)) return 0
-  return Math.round(dollars * 100)
+function parsePriceFromSnippet(snippet: string): number {
+  // Match price patterns like "$200.00", "$25 - $49", "$200.00 through $280.00"
+  const priceMatches = snippet.match(/\$\s?(\d+(?:\.\d+)?)/g)
+  if (priceMatches && priceMatches.length > 0) {
+    const firstPrice = priceMatches[0].replace(/[$\s]/g, '')
+    const dollars = parseFloat(firstPrice)
+    if (!isNaN(dollars)) {
+      return Math.round(dollars * 100)
+    }
+  }
+  return 0
+}
+
+function extractMerchant(link: string): string {
+  try {
+    const url = new URL(link)
+    const hostname = url.hostname
+    // Remove "www." and extract domain name
+    const parts = hostname.replace('www.', '').split('.')
+    if (parts.length > 0) {
+      return parts[0].charAt(0).toUpperCase() + parts[0].slice(1)
+    }
+  } catch {
+    // ignore
+  }
+  return 'Unknown'
 }
 
 function inferCategory(query: string): string {
