@@ -135,10 +135,23 @@ test('shopping conversation sends one request and receives an updated cart', asy
     expect(String(input)).toBe('/api/boards/board-1/chat')
     expect(init?.method).toBe('POST')
     expect(JSON.parse(String(init?.body))).toEqual({ message: 'Find a warm lamp under $100' })
-    return Response.json({ assistantMessage: 'Added a lamp.', cart: { items: [{ productId: 'lamp' }], totalCents: 5500 }, steps: 3 })
+    // The chat route streams newline-delimited JSON events, not one buffered
+    // body — see shoppingAgent.ts's runShoppingAgentTurnStream.
+    const events = [
+      { type: 'tool-call', toolName: 'search_products' },
+      { type: 'text-delta', text: 'Added a ' },
+      { type: 'text-delta', text: 'lamp.' },
+      { type: 'done', assistantMessage: 'Added a lamp.', cart: { items: [{ productId: 'lamp' }], totalCents: 5500 }, steps: 3 },
+    ]
+    const body = events.map((event) => `${JSON.stringify(event)}\n`).join('')
+    return new Response(body, { headers: { 'content-type': 'application/x-ndjson' } })
   }) as typeof fetch
 
-  const reply = await shopWithAgent('board-1', 'Find a warm lamp under $100')
+  const streamed: string[] = []
+  const reply = await shopWithAgent('board-1', 'Find a warm lamp under $100', (event) => {
+    if (event.type === 'text-delta') streamed.push(event.text)
+  })
+  expect(streamed.join('')).toBe('Added a lamp.')
   expect(reply.assistantMessage).toBe('Added a lamp.')
   expect(reply.cart.items[0].productId).toBe('lamp')
 })

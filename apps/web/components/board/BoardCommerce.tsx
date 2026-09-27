@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import {
   applyCartActions, getCart, getCheckout, getCheckoutProofs, preparePayments, refreshPayments,
   runMerchantCheckout, setCartBudget, shopWithAgent, startCheckout, updateCartItem,
@@ -8,12 +9,62 @@ import {
 } from "@/lib/boards/store";
 
 type CartItem = Cart["items"][number];
-type Message = { id: number; role: "shopper" | "mosaic"; text: string; products?: CartItem[] };
+type Message = { id: number; role: "shopper" | "mosaic"; text: string; products?: CartItem[]; streaming?: boolean };
 type LightboxImage = { url: string; alt: string };
 
 function money(cents: number, currency = "usd") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
 }
+
+// Playful, but only stands in for real progress: it rotates while a tool is
+// actively running (agentActivity is set from the stream's tool-call
+// events) and disappears the instant real text starts arriving — it never
+// substitutes for genuine feedback, per "AI as copilot" transparency rules.
+const LOADING_WORDS = ["Vibing", "Sensing", "Scouting", "Curating", "Rummaging", "Cross-checking"];
+const TOOL_LABELS: Record<string, string> = {
+  search_products: "Searching the catalog",
+  browse_webpage: "Reading a product page",
+  browse_summary: "Skimming a product page",
+  run_merchant_checkout: "Walking through checkout",
+  add_item: "Adding to cart",
+  remove_item: "Updating cart",
+  replace_item: "Swapping items",
+  swap_item: "Swapping items",
+  lock_item: "Updating cart",
+  unlock_item: "Updating cart",
+  set_budget: "Updating budget",
+};
+
+function AgentActivity({ toolName }: { toolName: string | null }) {
+  const [wordIndex, setWordIndex] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setWordIndex((n) => (n + 1) % LOADING_WORDS.length), 1400);
+    return () => clearInterval(id);
+  }, []);
+  const label = toolName ? TOOL_LABELS[toolName] ?? "Working on it" : LOADING_WORDS[wordIndex];
+  return (
+    <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5 text-stone-600">
+      <span className="flex gap-0.5">
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.3s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.15s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400" />
+      </span>
+      {label}…
+    </span>
+  );
+}
+
+// Minimal styling for markdown in a chat bubble — no typography plugin
+// installed, so map tags directly to the existing text-sm scale instead of
+// pulling in @tailwindcss/typography for a handful of elements.
+const MARKDOWN_COMPONENTS = {
+  p: (props: React.ComponentPropsWithoutRef<"p">) => <p className="mb-1 last:mb-0" {...props} />,
+  ul: (props: React.ComponentPropsWithoutRef<"ul">) => <ul className="mb-1 list-disc space-y-0.5 pl-4 last:mb-0" {...props} />,
+  ol: (props: React.ComponentPropsWithoutRef<"ol">) => <ol className="mb-1 list-decimal space-y-0.5 pl-4 last:mb-0" {...props} />,
+  a: (props: React.ComponentPropsWithoutRef<"a">) => <a target="_blank" rel="noreferrer" className="underline" {...props} />,
+  code: (props: React.ComponentPropsWithoutRef<"code">) => <code className="rounded bg-black/10 px-1 py-0.5 text-xs" {...props} />,
+  strong: (props: React.ComponentPropsWithoutRef<"strong">) => <strong className="font-semibold" {...props} />,
+};
 
 // Two separate click targets, not one: the thumbnail opens a bigger preview
 // (a native <dialog>, not a custom overlay — semantics first), the rest of
@@ -81,6 +132,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
   const [browserProofs, setBrowserProofs] = useState<Record<string, CheckoutProof>>({});
   const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [agentActivity, setAgentActivity] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [budgetInput, setBudgetInput] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -126,7 +178,12 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
   async function sendToAgent(message: string, displayText = message) {
     if (!message.trim() || busy || cart?.status !== "open") return;
     const priorItemIds = new Set(cart?.items.map((item) => item.id) ?? []);
-    setMessages((current) => [...current, { id: Date.now(), role: "shopper", text: displayText }]);
+    const streamId = Date.now() + 1;
+    setMessages((current) => [
+      ...current,
+      { id: streamId - 1, role: "shopper", text: displayText },
+      { id: streamId, role: "mosaic", text: "", streaming: true },
+    ]);
     // Cleared the instant the message is sent, not after the reply comes
     // back — a request can take 10s+ (it's an LLM tool-calling loop), and
     // waiting to clear until then left the sent text sitting in the box the
@@ -134,8 +191,16 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
     setQuery((current) => current.trim() === message.trim() ? "" : current);
     setBusy("shop");
     setError(null);
+    setAgentActivity(null);
     try {
-      const result = await shopWithAgent(boardId, message);
+      const result = await shopWithAgent(boardId, message, (event) => {
+        if (event.type === "tool-call") {
+          setAgentActivity(event.toolName);
+        } else if (event.type === "text-delta") {
+          setAgentActivity(null);
+          setMessages((current) => current.map((m) => m.id === streamId ? { ...m, text: m.text + event.text } : m));
+        }
+      });
       setCart(result.cart);
       setBudgetInput(result.cart.budgetCents === null ? "" : String(result.cart.budgetCents / 100));
       // Cart items the agent touched this turn (added, replaced, or swapped
@@ -144,15 +209,18 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
       // product card alongside the reply so the picked item's image and
       // price are visible right in the chat, not just in the cart aside.
       const touchedItems = result.cart.items.filter((item) => !priorItemIds.has(item.id));
-      setMessages((current) => [...current, {
-        id: Date.now() + 1, role: "mosaic",
+      setMessages((current) => current.map((m) => m.id === streamId ? {
+        ...m,
         text: result.assistantMessage.trim() || "I reviewed your request. Check the cart for any changes.",
         products: touchedItems.length > 0 ? touchedItems : undefined,
-      }]);
+        streaming: false,
+      } : m));
     } catch (cause) {
+      setMessages((current) => current.filter((m) => m.id !== streamId));
       report(cause, "Could not shop for products");
     } finally {
       setBusy(null);
+      setAgentActivity(null);
     }
   }
 
@@ -286,7 +354,18 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
           {messages.length === 0 && <p className="text-sm text-stone-500">Try “a warm ceramic lamp under $100” or “linen for my room”.</p>}
           {messages.map((message) => (
             <div key={message.id} className={`max-w-[90%] space-y-2 rounded-2xl px-4 py-2 text-sm ${message.role === "shopper" ? "ml-auto bg-stone-900 text-white" : "bg-[#efe4d2] text-stone-800"}`}>
-              <p>{message.text}</p>
+              {message.role === "mosaic" ? (
+                message.streaming && !message.text ? (
+                  <AgentActivity toolName={agentActivity} />
+                ) : (
+                  <div>
+                    <ReactMarkdown components={MARKDOWN_COMPONENTS}>{message.text}</ReactMarkdown>
+                    {message.streaming && <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-stone-500 align-text-bottom" aria-hidden="true" />}
+                  </div>
+                )
+              ) : (
+                <p>{message.text}</p>
+              )}
               {message.products?.map((item) => (
                 <div key={item.id} className="flex items-center gap-2 rounded-xl bg-white/60 p-2">
                   <ProductThumb item={item} onOpen={setLightboxImage} />

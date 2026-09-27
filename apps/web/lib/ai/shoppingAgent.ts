@@ -1,7 +1,7 @@
-import type { ModelMessage } from 'ai'
+import type { LanguageModel, ModelMessage, ToolSet } from 'ai'
 import { getCart } from '@/lib/server/cart'
 import { getVibeProfile } from '@/lib/server/vibe-profile'
-import { runAgentTurn } from './harness'
+import { runAgentTurn, runAgentTurnStream } from './harness'
 import { resolveAgentModel, type AgentModelConfig } from './providers'
 import { createShoppingTools } from './tools/shoppingTools'
 import { performSearch } from '@/lib/server/searchOrchestrator'
@@ -40,10 +40,16 @@ export type ShoppingAgentTurnResult = {
   steps: number
 }
 
-export async function runShoppingAgentTurn(input: ShoppingAgentTurnInput): Promise<ShoppingAgentTurnResult> {
+// Shared setup for both the buffered (runShoppingAgentTurn) and streaming
+// (runShoppingAgentTurnStream) entry points — loading the vibe profile and
+// cart, proactively searching the internet, and building the message list is
+// identical either way; only how the model's output is consumed differs.
+async function prepareShoppingTurn(input: ShoppingAgentTurnInput): Promise<{
+  model: LanguageModel
+  tools: ToolSet
+  messages: ModelMessage[]
+}> {
   const { guestId, boardId, userMessage, conversationHistory = [], model } = input
-  console.log(`[shopping-agent] turn start: boardId=${boardId} message=${JSON.stringify(userMessage)}`)
-
   const db = getSupabaseAdmin()
 
   const [vibeProfile, cart] = await Promise.all([
@@ -80,17 +86,43 @@ export async function runShoppingAgentTurn(input: ShoppingAgentTurnInput): Promi
     { role: 'user', content: userMessage },
   ]
 
-  const tools = createShoppingTools(guestId, boardId)
-  const result = await runAgentTurn({
-    model: resolveAgentModel(model),
-    tools,
-    system: SYSTEM_PROMPT,
-    messages,
-  })
+  return { model: resolveAgentModel(model), tools: createShoppingTools(guestId, boardId), messages }
+}
+
+export async function runShoppingAgentTurn(input: ShoppingAgentTurnInput): Promise<ShoppingAgentTurnResult> {
+  const { guestId, boardId, userMessage } = input
+  console.log(`[shopping-agent] turn start: boardId=${boardId} message=${JSON.stringify(userMessage)}`)
+
+  const { model, tools, messages } = await prepareShoppingTurn(input)
+  const result = await runAgentTurn({ model, tools, system: SYSTEM_PROMPT, messages })
 
   const updatedCart = await getCart(guestId, boardId)
   console.log(
     `[shopping-agent] turn done: steps=${result.steps} finalCartItems=${updatedCart.items.length} reply=${JSON.stringify(result.assistantMessage)}`,
   )
   return { assistantMessage: result.assistantMessage, cart: updatedCart, steps: result.steps }
+}
+
+export type ShoppingStreamEvent =
+  | { type: 'text-delta'; text: string }
+  | { type: 'tool-call'; toolName: string }
+  | { type: 'done'; assistantMessage: string; cart: Awaited<ReturnType<typeof getCart>>; steps: number }
+
+export async function* runShoppingAgentTurnStream(input: ShoppingAgentTurnInput): AsyncGenerator<ShoppingStreamEvent> {
+  const { guestId, boardId, userMessage } = input
+  console.log(`[shopping-agent] stream turn start: boardId=${boardId} message=${JSON.stringify(userMessage)}`)
+
+  const { model, tools, messages } = await prepareShoppingTurn(input)
+
+  for await (const event of runAgentTurnStream({ model, tools, system: SYSTEM_PROMPT, messages })) {
+    if (event.type === 'done') {
+      const updatedCart = await getCart(guestId, boardId)
+      console.log(
+        `[shopping-agent] stream turn done: steps=${event.steps} finalCartItems=${updatedCart.items.length} reply=${JSON.stringify(event.assistantMessage)}`,
+      )
+      yield { type: 'done', assistantMessage: event.assistantMessage, cart: updatedCart, steps: event.steps }
+    } else {
+      yield event
+    }
+  }
 }
