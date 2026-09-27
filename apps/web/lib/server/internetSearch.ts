@@ -1,6 +1,7 @@
 /**
  * Serper.dev client for internet product search.
- * Calls Google Shopping via Serper API and returns normalized product results.
+ * Calls Google Shopping via Serper API (POST to google.serper.dev/search).
+ * Returns normalized product results.
  */
 const SERPER_API_KEY = process.env.SERPER_API_KEY
 
@@ -33,28 +34,26 @@ export async function searchInternet(
   }
 
   try {
-    const params = new URLSearchParams({
+    const body: Record<string, unknown> = {
       q: query,
       tbm: 'shop',
-      num: '10',
-      hl: 'en',
+      num: 10,
       gl: 'us',
-    })
+      hl: 'en',
+    }
     if (maxPriceCents) {
       const min = Math.floor(maxPriceCents / 100)
       const max = Math.ceil(maxPriceCents / 100)
-      params.set('price', `${min}-${max}`)
+      body.price = `${min}-${max}`
     }
 
-    const url = `https://search.serper.dev/search?${params}`
-
-    const response = await fetch(url, {
-      method: 'GET',
+    const response = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
       headers: {
-        'X-API-Key': SERPER_API_KEY,
+        'X-API-KEY': SERPER_API_KEY,
         'Content-Type': 'application/json',
       },
-      next: { revalidate: 900 },
+      body: JSON.stringify(body),
     })
 
     if (!response.ok) {
