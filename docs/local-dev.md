@@ -29,6 +29,7 @@ Fill in `apps/web/.env.local`:
 | `ML_SERVICE_URL` | no | defaults `http://localhost:8000` |
 | `BROWSER_SERVICE_URL` | no | defaults `http://localhost:8100` |
 | `STRIPE_STORE_A_TEST_SECRET_KEY` / `STRIPE_STORE_B_TEST_SECRET_KEY` | yes | demo Stripe checkout, one per seeded merchant |
+| `APP_BASE_URL` | yes | this app's own public URL — used for Stripe return URLs and for the product links the shopping agent shows in its replies |
 | `LINK_CLI_ENABLED` | no | set `'true'` to enable the Stripe Link CLI dev tool (non-production only) |
 
 Seed the demo catalog once: `bun run seed:products`.

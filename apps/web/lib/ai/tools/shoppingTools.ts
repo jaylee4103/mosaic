@@ -22,6 +22,20 @@ async function resolveBrowseTarget(url: string): Promise<string> {
   return (await resolveDirectProductUrl(query)) ?? url
 }
 
+// search_products previously handed the model the raw cached productUrl —
+// often the same Google Shopping interstitial fixed for run_merchant_checkout/
+// browse_webpage — and the model would paste it verbatim into its reply
+// text, rendered as a real clickable link by the chat UI's markdown
+// renderer. That bypassed the app's own resolve-on-click redirect route
+// entirely (which only the structured product card in the UI used).
+// Routing the model's own view through the same redirect fixes it
+// regardless of where the link ends up: a product card, or pasted into text.
+function displayUrlFor(productId: string): string | null {
+  const baseUrl = process.env.APP_BASE_URL
+  if (!baseUrl) return null
+  return new URL(`/api/products/${productId}/link`, baseUrl).toString()
+}
+
 // Built by a factory so each tool can close over guestId/boardId. Cart
 // actions execute immediately (one per tool call) so the model sees success/failure within the same turn.
 export function createShoppingTools(
@@ -61,6 +75,20 @@ export function createShoppingTools(
       execute: logged('search_products', async ({ query, category, maxPriceCents }) => {
         // Catches thrown errors so they log instead of vanishing into the ai SDK's tool-call loop.
         try {
+          const toResult = (list: Awaited<ReturnType<typeof searchProducts>>) => {
+            lastSearchCandidateIds = list.map((p) => p.id)
+            return list.map((p) => ({
+              productId: p.id,
+              name: p.name,
+              merchantName: p.merchantName,
+              priceCents: p.priceCents,
+              category: p.category,
+              description: p.description,
+              productUrl: p.productUrl ? displayUrlFor(p.id) ?? p.productUrl : null,
+              imageUrl: p.imageUrl,
+            }))
+          }
+
           const products = (await searchProducts({ query, category, maxPriceCents }, db)).slice(0, CANDIDATE_POOL_SIZE)
 
           // Cache miss: trigger internet search, re-cache, then return results.
@@ -76,20 +104,10 @@ export function createShoppingTools(
             } catch (err) {
               console.error('[shopping-tools] Internet search failed:', err)
             }
-            return (await searchProducts({ query, category, maxPriceCents }, db)).slice(0, CANDIDATE_POOL_SIZE)
+            return toResult((await searchProducts({ query, category, maxPriceCents }, db)).slice(0, CANDIDATE_POOL_SIZE))
           }
 
-          lastSearchCandidateIds = products.map((p) => p.id)
-          return products.map((p) => ({
-            productId: p.id,
-            name: p.name,
-            merchantName: p.merchantName,
-            priceCents: p.priceCents,
-            category: p.category,
-            description: p.description,
-            productUrl: p.productUrl,
-            imageUrl: p.imageUrl,
-          }))
+          return toResult(products)
         } catch (err) {
           console.error('[shopping-tools] search_products failed:', err)
           return []
