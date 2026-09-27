@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { addImage, deleteImage, IMAGE_BUCKET, updateImage } from '../lib/server/board-images'
+import { addImage, deleteImage, IMAGE_BUCKET, signImages, updateImage } from '../lib/server/board-images'
 import { createFakeSupabase } from './support/fake-supabase'
 
 const GUEST_ID = 'guest-1'
@@ -65,4 +65,21 @@ test('deleteImage removes the storage object and the row', async () => {
   await deleteImage(GUEST_ID, BOARD_ID, image.id, client)
   expect(objects.size).toBe(0)
   expect(tables.board_images).toHaveLength(0)
+})
+
+test('missing storage objects do not prevent a board from loading', async () => {
+  const { client } = seedOwnedBoard()
+  const records = [
+    { id: 'good', storagePath: 'good.png', mimeType: 'image/png', note: null, position: 0, createdAt: '2026-09-27T00:00:00Z' },
+    { id: 'missing', storagePath: 'missing.png', mimeType: 'image/png', note: null, position: 1, createdAt: '2026-09-27T00:00:00Z' },
+  ]
+  client.storage.from = (() => ({
+    createSignedUrls: async () => ({ data: [
+      { path: 'good.png', signedUrl: 'https://storage.example/good.png', error: null },
+      { path: 'missing.png', signedUrl: null, error: 'Object not found' },
+    ], error: null }),
+  })) as unknown as typeof client.storage.from
+
+  const images = await signImages(records, client)
+  expect(images.map((image) => image.id)).toEqual(['good'])
 })

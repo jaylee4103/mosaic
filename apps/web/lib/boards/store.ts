@@ -109,7 +109,13 @@ function mapBoard(board: ApiBoardDetail): Board {
 
 export async function getBoards(): Promise<Board[]> {
   const { boards } = await request<{ boards: ApiBoard[] }>("/api/boards");
-  return Promise.all(boards.map((board) => getBoard(board.id)));
+  return Promise.all(boards.map(async (board) => {
+    try {
+      return await getBoard(board.id);
+    } catch {
+      return { id: board.id, name: board.name, images: [], vibe: null, created_at: board.createdAt };
+    }
+  }));
 }
 
 export async function getBoard(boardId: string): Promise<Board> {

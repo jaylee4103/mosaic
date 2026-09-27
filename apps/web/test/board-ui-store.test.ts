@@ -152,3 +152,20 @@ test('board deletion calls the guest-scoped delete route', async () => {
 
   await deleteBoard('board-1')
 })
+
+test('one failed board detail does not hide the other boards', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const path = String(input)
+    if (path === '/api/boards') return Response.json({ boards: [
+      { id: 'good', name: 'Good board', createdAt: '2026-09-27T00:00:00Z' },
+      { id: 'broken', name: 'Broken board', createdAt: '2026-09-27T00:00:00Z' },
+    ] })
+    if (path === '/api/boards/good') return Response.json({ id: 'good', name: 'Good board', createdAt: '2026-09-27T00:00:00Z', images: [], vibeProfile: null })
+    if (path === '/api/boards/broken') return Response.json({ error: 'Could not sign an image' }, { status: 502 })
+    throw new Error(`Unexpected request: ${path}`)
+  }) as typeof fetch
+
+  const boards = await getBoards()
+  expect(boards.map((board) => board.name)).toEqual(['Good board', 'Broken board'])
+  expect(boards[1].images).toEqual([])
+})

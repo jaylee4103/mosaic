@@ -66,10 +66,13 @@ export async function signImages(
   const { data, error } = await db.storage.from(IMAGE_BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS)
   if (error || !data) throw new Error('Could not sign board image URLs')
   const urlByPath = new Map(data.map((entry) => [entry.path, entry.signedUrl]))
-  return records.map(({ storagePath, ...rest }) => {
+  return records.flatMap(({ storagePath, ...rest }) => {
     const url = urlByPath.get(storagePath)
-    if (!url) throw new Error('Could not sign board image URLs')
-    return { ...rest, url }
+    if (!url) {
+      console.warn(`[board-images] skipping unavailable image ${rest.id}`)
+      return []
+    }
+    return [{ ...rest, url }]
   })
 }
 
