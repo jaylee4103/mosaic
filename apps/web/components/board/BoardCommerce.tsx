@@ -209,7 +209,8 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
         ...m,
         text: result.assistantMessage.trim() || "I reviewed your request. Check the cart for any changes.",
         products: touchedItems.length > 0 ? touchedItems : undefined,
-      }]);
+        streaming: false,
+      } : m));
       return true;
     } catch (cause) {
       setMessages((current) => current.filter((m) => m.id !== streamId));
