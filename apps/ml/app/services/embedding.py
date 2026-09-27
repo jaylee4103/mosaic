@@ -57,7 +57,7 @@ class EmbeddingService:
             return
         logger.info("Loading SigLIP2 model: %s on %s", self.model_name, self.device)
         self._processor = AutoProcessor.from_pretrained(self.model_name)
-        self._model = AutoModel.from_pretrained(self.model_name).to(self.device).eval()
+        self._model = AutoModel.from_pretrained(self.model_name, low_cpu_mem_usage=True).to(self.device).eval()
         self._logit_scale = self._model.logit_scale
         self._logit_bias = self._model.logit_bias
         logger.info("SigLIP2 model loaded. logit_scale=%.4f, logit_bias=%.4f",
