@@ -182,7 +182,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
       <section aria-label="Shopping conversation" className="min-w-0">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <h2 className="font-[family-name:var(--font-fraunces)] text-2xl text-stone-900">Shop this vibe</h2>
+            <h2 className="font-heading text-2xl text-stone-900">Shop this vibe</h2>
             <p className="mt-1 text-sm text-stone-500">{vibeName ? `Inspired by ${vibeName}. ` : ""}Tell Mosaic what you want, and it will add its pick to your cart.</p>
           </div>
         </div>
@@ -203,7 +203,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
       </section>
 
       <aside aria-label="Cart and checkout" className="min-w-0 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-        <h2 className="font-[family-name:var(--font-fraunces)] text-2xl text-stone-900">Your cart</h2>
+        <h2 className="font-heading text-2xl text-stone-900">Your cart</h2>
         {loading && <p className="mt-3 text-sm text-stone-500">Loading cart…</p>}
         {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {cart && <>

@@ -65,7 +65,7 @@ export function CreateBoardModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-lg rounded-xl bg-[#faf6ee] p-6 shadow-2xl">
-        <h2 className="font-[family-name:var(--font-fraunces)] text-2xl text-stone-900">
+        <h2 className="font-heading text-2xl text-stone-900">
           new board
         </h2>
         <p className="mt-1 text-sm text-stone-500">
