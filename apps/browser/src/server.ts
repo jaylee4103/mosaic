@@ -13,9 +13,10 @@ const PORT = Number(process.env.PORT ?? 8100)
 
 const server = Bun.serve({
   port: PORT,
-  idleTimeout: 90,
+  idleTimeout: 180,
   async fetch(req) {
     const url = new URL(req.url)
+    console.log(`[browser-service] ${req.method} ${url.pathname}`)
 
     if (url.pathname === '/health') {
       return Response.json({ status: 'ok' })
@@ -26,18 +27,27 @@ const server = Bun.serve({
       try {
         body = await req.json()
       } catch {
+        console.error('[browser-service] invalid JSON body')
         return Response.json({ error: 'Invalid JSON body' }, { status: 400 })
       }
 
       const parsed = CheckoutRequestSchema.safeParse(body)
       if (!parsed.success) {
+        console.error(`[browser-service] invalid request: ${JSON.stringify(parsed.error.flatten())}`)
         return Response.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 })
       }
 
-      const result = await runCheckoutFlow(parsed.data)
-      return Response.json(result)
+      try {
+        const result = await runCheckoutFlow(parsed.data)
+        console.log(`[browser-service] checkout flow result: success=${result.success} stoppedReason=${result.stoppedReason}`)
+        return Response.json(result)
+      } catch (err) {
+        console.error(`[browser-service] checkout flow crashed: ${err instanceof Error ? err.stack : String(err)}`)
+        return Response.json({ error: 'Checkout flow failed unexpectedly' }, { status: 500 })
+      }
     }
 
+    console.warn(`[browser-service] 404: ${url.pathname}`)
     return new Response('Not found', { status: 404 })
   },
 })

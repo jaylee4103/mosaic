@@ -86,7 +86,19 @@ export function BoardDetail({ boardId }: { boardId: string }) {
               <img src={img.image_url} alt="Inspiration" className="h-full w-full object-cover" />
             </div>
           ))}
+          <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-stone-300 p-2 text-center text-xs text-stone-600 transition-colors hover:border-stone-400 hover:bg-stone-50">
+            <span aria-hidden="true" className="flex h-7 w-7 items-center justify-center rounded-full border border-stone-300 text-base leading-none text-stone-500">+</span>
+            <span>Add more images</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              className="sr-only"
+              onChange={(event) => { void handleUpload(event.target.files); event.target.value = ""; }}
+            />
+          </label>
         </div>
+        {actionError && <p role="alert" className="mt-2 text-sm text-red-700">{actionError}</p>}
 
         <h1 className="mt-6 font-heading text-3xl text-stone-900">{board.name}</h1>
 
@@ -121,18 +133,6 @@ export function BoardDetail({ boardId }: { boardId: string }) {
           <button type="button" disabled={analysisState === "running"} onClick={() => void handlePreview("alpine")} className="rounded-full border border-stone-300 px-3 py-1.5 text-stone-800 disabled:opacity-40">Alpine</button>
           <span>Demo output, independent of uploaded images.</span>
         </div>
-
-        <label className="mt-4 inline-block cursor-pointer text-sm text-stone-700 underline">
-          Add more images
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            className="sr-only"
-            onChange={(event) => { void handleUpload(event.target.files); event.target.value = ""; }}
-          />
-        </label>
-        {actionError && <p role="alert" className="mt-2 text-sm text-red-700">{actionError}</p>}
 
         {board.vibe ? (
           <BoardCommerce boardId={boardId} vibeName={board.vibe.name} />

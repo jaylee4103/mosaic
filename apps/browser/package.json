@@ -9,6 +9,8 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.57",
+    "ai": "^7.0.118",
     "playwright": "^1.63.0",
     "zod": "^4.6.5"
   },
