@@ -16,10 +16,7 @@ function money(cents: number, currency = "usd") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
 }
 
-// Playful, but only stands in for real progress: it rotates while a tool is
-// actively running (agentActivity is set from the stream's tool-call
-// events) and disappears the instant real text starts arriving — it never
-// substitutes for genuine feedback, per "AI as copilot" transparency rules.
+// Rotates while idle; swaps to a real tool label the instant one is active.
 const LOADING_WORDS = [
   "Vibing", "Sensing", "Scouting", "Curating", "Rummaging", "Cross-checking",
   "Noodling", "Percolating", "Sniffing around", "Eyeballing options", "Daydreaming",
@@ -70,9 +67,7 @@ function AgentActivity({ toolName }: { toolName: string | null }) {
   );
 }
 
-// Minimal styling for markdown in a chat bubble — no typography plugin
-// installed, so map tags directly to the existing text-sm scale instead of
-// pulling in @tailwindcss/typography for a handful of elements.
+// No typography plugin installed — map tags to the existing text-sm scale.
 const MARKDOWN_COMPONENTS = {
   p: (props: React.ComponentPropsWithoutRef<"p">) => <p className="mb-1 last:mb-0" {...props} />,
   ul: (props: React.ComponentPropsWithoutRef<"ul">) => <ul className="mb-1 list-disc space-y-0.5 pl-4 last:mb-0" {...props} />,
@@ -82,11 +77,8 @@ const MARKDOWN_COMPONENTS = {
   strong: (props: React.ComponentPropsWithoutRef<"strong">) => <strong className="font-semibold" {...props} />,
 };
 
-// Two separate click targets, not one: the thumbnail opens a bigger preview
-// (a native <dialog>, not a custom overlay — semantics first), the rest of
-// the card opens the real merchant page in a new tab. Nesting an <a> around
-// a <button> (or vice versa) is invalid HTML and makes clicks ambiguous, so
-// they're siblings instead.
+// Thumbnail opens a lightbox; the rest of the card is a separate link to the
+// merchant page — kept as siblings since nesting <a>/<button> is invalid HTML.
 function ProductThumb({ item, size = 48, onOpen }: { item: CartItem; size?: number; onOpen?: (image: LightboxImage) => void }) {
   const style = { width: size, height: size };
   if (!item.product?.imageUrl) {
@@ -109,8 +101,7 @@ function ProductThumb({ item, size = 48, onOpen }: { item: CartItem; size?: numb
   );
 }
 
-// Wraps product name/merchant text in a link to the real merchant page when
-// one exists, so clicking the item (not its thumbnail) opens the source.
+// Links to the merchant page when one exists.
 function ProductLink({ url, className, children }: { url: string | null | undefined; className: string; children: React.ReactNode }) {
   if (!url) return <div className={className}>{children}</div>;
   return <a href={url} target="_blank" rel="noreferrer" className={`${className} hover:underline`}>{children}</a>;
@@ -166,11 +157,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
         setCheckout(latestCheckout);
         setCart(latestCart);
         setBudgetInput(latestCart.budgetCents === null ? "" : String(latestCart.budgetCents / 100));
-        // Fetched separately: checkout proofs are supplementary display data,
-        // not required to use the cart, so a failure here (e.g. a pending
-        // migration) shouldn't take down cart/checkout loading with it —
-        // that coupling is exactly what made one broken endpoint look like
-        // "the whole cart is broken" before.
+        // Fetched separately so a failure here can't break cart/checkout loading.
         getCheckoutProofs(boardId)
           .then((proofs) => { if (active) setBrowserProofs(Object.fromEntries(proofs.map((proof) => [proof.productId, proof]))); })
           .catch((cause) => console.error("Could not load checkout proofs:", cause));
@@ -200,10 +187,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
       { id: streamId - 1, role: "shopper", text: displayText },
       { id: streamId, role: "mosaic", text: "", streaming: true },
     ]);
-    // Cleared the instant the message is sent, not after the reply comes
-    // back — a request can take 10s+ (it's an LLM tool-calling loop), and
-    // waiting to clear until then left the sent text sitting in the box the
-    // whole time, plus never cleared it at all on error.
+    // Cleared immediately, not after the reply — a turn can take 10s+.
     setQuery((current) => current.trim() === message.trim() ? "" : current);
     setBusy("shop");
     setError(null);
@@ -219,11 +203,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
       });
       setCart(result.cart);
       setBudgetInput(result.cart.budgetCents === null ? "" : String(result.cart.budgetCents / 100));
-      // Cart items the agent touched this turn (added, replaced, or swapped
-      // in) — their cart_item id is new even though the productId slot may
-      // be reused, so this catches add/replace/swap alike. Surfaced as a
-      // product card alongside the reply so the picked item's image and
-      // price are visible right in the chat, not just in the cart aside.
+      // Cart items the agent touched this turn — new cart_item ids, even if the productId slot was reused.
       const touchedItems = result.cart.items.filter((item) => !priorItemIds.has(item.id));
       setMessages((current) => current.map((m) => m.id === streamId ? {
         ...m,
@@ -296,11 +276,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
     setBusy("checkout");
     setError(null);
     try {
-      // Two disjoint checkout paths per item's merchant (see
-      // .spec/browser-checkout-proof.md): 'browser' merchants have no API
-      // integration, so the agent drives their real site instead and stops
-      // with a screenshot right before payment. Everything else goes
-      // through the existing Stripe test-checkout flow.
+      // 'browser' merchants get the screenshot-proof flow; everything else uses Stripe test-checkout.
       const browserItems = cart.items.filter((item) => item.product?.checkoutMethod === "browser");
       const hasOtherItems = cart.items.some((item) => item.product && item.product.checkoutMethod !== "browser");
 

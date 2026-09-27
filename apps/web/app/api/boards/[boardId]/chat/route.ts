@@ -7,12 +7,7 @@ export const runtime = 'nodejs'
 
 type Context = { params: Promise<{ boardId: string }> }
 
-// Streams newline-delimited JSON events (ShoppingStreamEvent) instead of a
-// single buffered JSON body, so the client can render text as it's
-// generated and show which tool the agent is currently running — see
-// shoppingAgent.ts's runShoppingAgentTurnStream. The cookie still has to be
-// set on this initial Response (headers are fixed once the body starts
-// streaming), same as the buffered json() helper would have done.
+// Streams newline-delimited JSON events (ShoppingStreamEvent) instead of one buffered body.
 export async function POST(request: Request, { params }: Context) {
   let guest: GuestSession | undefined
   try {

@@ -1,12 +1,6 @@
 /**
- * Serper.dev client for internet product search.
- * Calls Google Shopping via Serper's dedicated /shopping endpoint — NOT
- * /search's organic web results. Organic results are frequently category or
- * listing pages (e.g. a retailer's "Arctic Posters" browse page listing
- * dozens of items, no single price) rather than a specific product, which
- * silently corrupted every downstream productUrl/priceCents/imageUrl. The
- * Shopping endpoint returns individual listings with a real price and image
- * per item, because that's what Google's Shopping tab itself indexes.
+ * Serper.dev client for internet product search. Uses /shopping, not
+ * /search's organic results (those are often category/listing pages).
  */
 import { categorizeProducts } from '@/lib/ai/productCategorizer'
 
@@ -78,9 +72,7 @@ export async function searchInternet(
 
     const validResults = shoppingResults.filter((item) => item.title && item.link)
 
-    // One batched classification call per query's result set — not per
-    // product, not a keyword list — so the category actually reflects what
-    // the item is, and a single call covers up to ~10 results.
+    // One batched classification call per query's result set, not per product.
     const categories = category
       ? validResults.map(() => category)
       : await categorizeProducts(validResults.map((item) => item.title))
@@ -104,8 +96,7 @@ export async function searchInternet(
 }
 
 function parsePrice(price: string): number {
-  // Shopping results give a single price per listing, e.g. "$24.99" — no
-  // range-guessing needed the way the old snippet-scraping approach required.
+  // Shopping results give a single price per listing, e.g. "$24.99".
   const match = price.match(/(\d+(?:\.\d+)?)/)
   if (match) {
     const dollars = parseFloat(match[1])
@@ -114,16 +105,9 @@ function parsePrice(price: string): number {
   return 0
 }
 
-// Serper's /shopping `link` field is always a Google Shopping interstitial
-// (google.com/search?ibp=oshop&... — a comparison page listing offers, not
-// a merchant page), never a direct merchant URL — confirmed against the
-// live API, not documented anywhere. Fine for a human clicking it in their
-// own browser (it's a normal Google Shopping results page), but automation
-// (browse_webpage, run_merchant_checkout) hitting it as a headless bot gets
-// a CAPTCHA every time. Resolved lazily, only when something actually needs
-// to act on the link — Serper returns up to 40 results/query, so resolving
-// every cached product eagerly would be 40x the API calls for links mostly
-// never used.
+// Serper's /shopping `link` is always a Google Shopping interstitial, never
+// a direct merchant URL (confirmed live, undocumented). Resolved lazily,
+// only when something actually acts on the link.
 export function isGoogleInterstitialUrl(url: string): boolean {
   try {
     return new URL(url).hostname.includes('google.')
@@ -132,12 +116,7 @@ export function isGoogleInterstitialUrl(url: string): boolean {
   }
 }
 
-// Falls back to a targeted organic search for the same title/merchant and
-// takes the first result that isn't itself another Google domain — a
-// specific "<exact product title> <merchant name>" query reliably lands on
-// the merchant's own product page instead of a category page (unlike the
-// generic vibe-term queries searchInternet() itself uses, which is why this
-// isn't just reusing that path).
+// Falls back to a targeted organic search ("<title> <merchant>") and takes the first non-Google result.
 export async function resolveDirectProductUrl(query: string): Promise<string | null> {
   if (!SERPER_API_KEY) return null
   try {

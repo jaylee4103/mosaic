@@ -6,9 +6,7 @@ import { isGoogleInterstitialUrl, resolveDirectProductUrl } from './internetSear
 import { getProductsByIds } from './products'
 import { getSupabaseAdmin } from './supabase'
 
-// See .spec/browser-checkout-proof.md. Screenshots go here, not inline in
-// Postgres — the browser service returns base64, we upload it and store only
-// the resulting path (mirrors board-images.ts's IMAGE_BUCKET pattern).
+// See .spec/browser-checkout-proof.md. Mirrors board-images.ts's IMAGE_BUCKET pattern.
 export const CHECKOUT_PROOF_BUCKET = 'mosaic-checkout-proofs'
 const SIGNED_URL_TTL_SECONDS = 60 * 60
 const BROWSER_SERVICE_URL = process.env.BROWSER_SERVICE_URL ?? 'http://localhost:8100'
@@ -171,11 +169,7 @@ export async function runMerchantCheckout(
     )
   }
 
-  // Cached productUrl is frequently a Google Shopping interstitial, not the
-  // merchant's real page (see internetSearch.ts) — heading a headless
-  // browser straight at Google gets a CAPTCHA every time, not a checkout
-  // flow. Resolve to the actual retailer page first; fail cleanly rather
-  // than screenshotting a CAPTCHA page as if it were checkout progress.
+  // productUrl is often a Google Shopping interstitial (see internetSearch.ts); resolve first or fail cleanly.
   let productUrl = product.productUrl
   if (isGoogleInterstitialUrl(productUrl)) {
     const resolved = await resolveDirectProductUrl(`${product.name} ${product.merchantName}`)

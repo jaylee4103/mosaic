@@ -137,11 +137,7 @@ export function BoardDetail({ boardId }: { boardId: string }) {
         {board.vibe ? (
           <BoardCommerce boardId={boardId} vibeName={board.vibe.name} />
         ) : (
-          // Chat/cart depend on a vibe profile to choose what to search for
-          // (see shoppingAgent.ts's system prompt) — showing them before one
-          // exists let you "shop" against nothing. An empty state with the
-          // next action, not a hidden section, per the UX rule that empty
-          // states should point forward rather than just disappear.
+          // Chat/cart need a vibe profile to search against.
           <div className="mt-8 rounded-2xl border border-dashed border-stone-300 bg-white/50 p-6 text-center text-sm text-stone-600">
             {analysisState === "running"
               ? "Shopping unlocks once we've analyzed your board's vibe — hang tight."

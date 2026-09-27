@@ -1,12 +1,6 @@
 import { generateText, streamText, stepCountIs, type LanguageModel, type ModelMessage, type ToolSet } from 'ai'
 
-// Generic tool-calling agent loop. Deliberately knows nothing about
-// shopping, carts, or products — an agent is just (model, tools, system
-// prompt, messages) passed in by its caller. This is what makes tools and
-// models independently swappable between agents: a future "styling agent"
-// or "checkout agent" reuses this same loop with a different tool set, and
-// any agent can swap providers (see providers.ts) without this file
-// changing at all.
+// Generic tool-calling agent loop, agnostic of shopping/carts/products.
 export type AgentTurnInput = {
   model: LanguageModel
   tools: ToolSet
@@ -54,12 +48,7 @@ function modelLabel(model: LanguageModel): string {
   return typeof model === 'string' ? model : `${model.provider}/${model.modelId}`
 }
 
-// Streamed events a caller (the chat route) forwards to the client in real
-// time. 'tool-call' fires on 'tool-input-start' (the earliest signal a tool
-// is running, before its arguments finish streaming) — that's what drives a
-// UI's "searching…" indicator. 'done' carries the same result shape
-// runAgentTurn returns, folded into the stream instead of a generator return
-// value so a consumer can just handle every event the same way.
+// Streamed to the client in real time. 'done' carries the same shape runAgentTurn returns.
 export type AgentStreamEvent =
   | { type: 'text-delta'; text: string }
   | { type: 'tool-call'; toolName: string }

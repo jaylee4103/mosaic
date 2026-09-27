@@ -11,18 +11,10 @@ import { browseWebpage, getPageSummary } from '@/lib/server/browser'
 import { runMerchantCheckout } from '@/lib/server/browserCheckout'
 import { isGoogleInterstitialUrl, resolveDirectProductUrl } from '@/lib/server/internetSearch'
 
-// Cap on how many search results we treat as "close enough to the vibe to
-// keep as fallback candidates" — the top pick gets added, the rest are
-// stashed (see agent-alternates.ts) for a later swap_item call instead of
-// re-searching. Not a hard product-ranking decision (products.ts owns
-// ranking) — just how many of its results this layer holds onto.
+// Fallback candidates stashed for a later swap_item call (see agent-alternates.ts).
 const CANDIDATE_POOL_SIZE = 4
 
-// Cached productUrl is frequently a Google Shopping interstitial, not the
-// merchant's real page (see internetSearch.ts) — browsing it as a headless
-// bot gets a CAPTCHA, not the product page it looks like from the outside.
-// Only `url` is known here (no merchant name), so this best-effort resolves
-// using the interstitial's own `q=` search-query param.
+// Cached productUrl is often a Google Shopping interstitial (see internetSearch.ts); resolve before browsing.
 async function resolveBrowseTarget(url: string): Promise<string> {
   if (!isGoogleInterstitialUrl(url)) return url
   const query = new URL(url).searchParams.get('q')
@@ -30,18 +22,8 @@ async function resolveBrowseTarget(url: string): Promise<string> {
   return (await resolveDirectProductUrl(query)) ?? url
 }
 
-// One tool set implementation of the generic AgentTurnInput['tools'] shape
-// the harness expects (see harness.ts) — swappable for a different tool set
-// entirely (a future agent doesn't have to touch carts at all) without the
-// harness changing. Built by a factory, not exported as static tools,
-// because each tool needs a guestId/boardId bound into its closure — a
-// fresh instance per board/guest, same shape every time.
-//
-// Cart actions execute immediately, one per tool call (via applyCartActions
-// with a single-action batch), rather than accumulating and batching at
-// end-of-turn as originally sketched in .spec/shopping-agent-system.md —
-// the model needs to see whether e.g. an ADD actually succeeded (product
-// not found, etc.) so it can react within the same turn, not just after.
+// Built by a factory so each tool can close over guestId/boardId. Cart
+// actions execute immediately (one per tool call) so the model sees success/failure within the same turn.
 export function createShoppingTools(
   guestId: string,
   boardId: string,
@@ -54,8 +36,7 @@ export function createShoppingTools(
     return outcome.results[0]
   }
 
-  // Wraps a tool's execute so every call is logged the same way, without
-  // repeating console.log at every call site below.
+  // Wraps a tool's execute so every call is logged the same way.
   function logged<TArgs, TResult>(name: string, execute: (args: TArgs) => Promise<TResult>) {
     return async (args: TArgs): Promise<TResult> => {
       console.log(`[shopping-tools] ${name} called with: ${JSON.stringify(args)}`)
@@ -65,11 +46,7 @@ export function createShoppingTools(
     }
   }
 
-  // Correlates a search_products call with the add_item call that (usually)
-  // follows it in the same turn, so add_item knows which runner-up
-  // candidates to stash. Turn-scoped only (this factory is called fresh per
-  // HTTP request) — cross-turn persistence is what agent-alternates.ts is
-  // for; this is just same-turn bookkeeping.
+  // Correlates a search_products call with the add_item call that follows it, turn-scoped only.
   let lastSearchCandidateIds: string[] = []
 
   return {
@@ -78,23 +55,15 @@ export function createShoppingTools(
       inputSchema: z.object({
         query: z.string().optional().describe('Free-text search, e.g. "desk lamp"'),
         category: z.string().optional(),
-        // products.price_cents is a Postgres `integer` column (max 2147483647)
-        // — a model-supplied "no limit" sentinel like Number.MAX_SAFE_INTEGER
-        // makes PostgREST throw "integer out of range" on the filter, which
-        // otherwise escapes uncaught (see logged() below) and looks like a
-        // silent, unlogged failure. Capping here means it can't happen.
+        // price_cents is a Postgres `integer` column — cap avoids a "no limit" sentinel overflowing it.
         maxPriceCents: z.number().int().positive().max(2_147_483_647).optional(),
       }),
       execute: logged('search_products', async ({ query, category, maxPriceCents }) => {
-        // Any thrown error here (e.g. a DB-level error) would otherwise
-        // escape uncaught: the ai SDK's tool-call loop swallows it into an
-        // error part with no log line at all, which is why this used to look
-        // like the tool silently returning nothing instead of a real error.
+        // Catches thrown errors so they log instead of vanishing into the ai SDK's tool-call loop.
         try {
-          // Check if cached results exist
           const products = (await searchProducts({ query, category, maxPriceCents }, db)).slice(0, CANDIDATE_POOL_SIZE)
 
-          // Cache miss: trigger internet search, re-cache, then return results
+          // Cache miss: trigger internet search, re-cache, then return results.
           if (products.length === 0) {
             console.log(`[shopping-tools] Cache miss for "${query}", triggering internet search...`)
             try {

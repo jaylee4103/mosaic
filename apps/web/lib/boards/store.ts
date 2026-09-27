@@ -194,10 +194,7 @@ export type ShoppingStreamEvent =
   | { type: "done"; assistantMessage: string; cart: Cart; steps: number }
   | { type: "error"; message: string };
 
-// The chat route streams newline-delimited JSON (ShoppingStreamEvent) instead
-// of one buffered response, so onEvent can drive live text and a "what's it
-// doing right now" indicator instead of the UI just staring at nothing for
-// however long the agent's tool-calling loop takes.
+// The chat route streams newline-delimited JSON; onEvent drives live text and an activity indicator.
 export async function shopWithAgent(
   boardId: string,
   message: string,

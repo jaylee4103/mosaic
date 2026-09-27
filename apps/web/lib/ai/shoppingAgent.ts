@@ -7,10 +7,7 @@ import { createShoppingTools } from './tools/shoppingTools'
 import { performSearch } from '@/lib/server/searchOrchestrator'
 import { getSupabaseAdmin } from '@/lib/server/supabase'
 
-// The concrete "shopping agent" the root README describes — composes the
-// generic harness (harness.ts) with the shopping tool set (tools/) and a
-// system prompt. This is the one thing here that's shopping-specific;
-// everything it depends on is swappable independently.
+// The concrete shopping agent: harness.ts's generic loop + the shopping tool set + this system prompt.
 const SYSTEM_PROMPT = `You are Mosaic's shopping agent. You help the user build a cart of products that match their board's aesthetic (its "vibe profile") and their budget.
 
 Rules:
@@ -40,10 +37,7 @@ export type ShoppingAgentTurnResult = {
   steps: number
 }
 
-// Shared setup for both the buffered (runShoppingAgentTurn) and streaming
-// (runShoppingAgentTurnStream) entry points — loading the vibe profile and
-// cart, proactively searching the internet, and building the message list is
-// identical either way; only how the model's output is consumed differs.
+// Shared setup for the buffered and streaming entry points below.
 async function prepareShoppingTurn(input: ShoppingAgentTurnInput): Promise<{
   model: LanguageModel
   tools: ToolSet
@@ -57,8 +51,7 @@ async function prepareShoppingTurn(input: ShoppingAgentTurnInput): Promise<{
     getCart(guestId, boardId),
   ])
 
-  // Proactively search the internet based on vibe terms
-  // This populates the Postgres cache before the agent tool loop begins
+  // Proactively populate the internet-search cache before the agent tool loop begins.
   if (vibeProfile) {
     try {
       await performSearch(vibeProfile, userMessage, guestId, db)
