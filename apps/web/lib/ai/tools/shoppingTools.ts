@@ -6,6 +6,7 @@ import { searchProducts } from '@/lib/server/products'
 import { dropAlternates, popNextAlternate, storeAlternates } from '@/lib/server/agent-alternates'
 import { getSupabaseAdmin } from '@/lib/server/supabase'
 import { performSearch } from '@/lib/server/searchOrchestrator'
+import { browseWebpage, getPageSummary } from '@/lib/server/browser'
 
 // Cap on how many search results we treat as "close enough to the vibe to
 // keep as fallback candidates" — the top pick gets added, the rest are
@@ -58,7 +59,7 @@ export function createShoppingTools(
 
   return {
     search_products: tool({
-      description: `Search the product catalog by query, category, and max price. Returns up to ${CANDIDATE_POOL_SIZE} close matches withwith product URLs you can visit. Use productUrl to click through to the retailer's website. Useproduct URLs you can visit. Use productUrl to click through to the retailer's website. Use this to find a productId before adding it to the cart.`,
+      description: `Search the product catalog by query, category, and max price. Returns up to ${CANDIDATE_POOL_SIZE} close matches withwith product URLs you can visit. Use productUrl to click through to the retailer's website. Use this to find a productId before adding it to the cart.`,
       inputSchema: z.object({
         query: z.string().optional().describe('Free-text search, e.g. "desk lamp"'),
         category: z.string().optional(),
@@ -94,6 +95,22 @@ export function createShoppingTools(
           productUrl: p.productUrl,
           imageUrl: p.imageUrl,
         }))
+      }),
+    }),
+
+    browse_webpage: tool({
+      description: `Navigate to a product URL and return the page content as text. Use this to view the full product page, check reviews, verify availability, or read details not in the search snippet. Returns the page title and text content.`,
+      inputSchema: z.object({ url: z.string().url().describe('The URL to navigate to (from search_products productUrl)') }),
+      execute: logged('browse_webpage', async ({ url }) => {
+        return await browseWebpage(url)
+      }),
+    }),
+
+    browse_summary: tool({
+      description: `Get a quick summary of a product page — title, key text excerpt, and any visible price. Faster than browse_webpage when you just need a quick overview.`,
+      inputSchema: z.object({ url: z.string().url().describe('The URL to summarize (from search_products productUrl)') }),
+      execute: logged('browse_summary', async ({ url }) => {
+        return await getPageSummary(url)
       }),
     }),
 
