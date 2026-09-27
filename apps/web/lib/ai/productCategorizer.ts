@@ -23,14 +23,22 @@ export async function categorizeProducts(titles: string[]): Promise<string[]> {
     const model = resolveAgentModel()
     const { object } = await generateObject({
       model,
+      // Not an exact-length array: the model occasionally drops or adds an
+      // item on a 40-title batch, and an exact `.length()` constraint used
+      // to reject the *entire* response over one miscount — turning 38
+      // correct labels into 40 "general"s. Reconciled by index below
+      // instead, so a miscount only affects the entries actually missing.
       schema: z.object({
-        categories: z.array(z.string().min(1)).length(titles.length)
+        categories: z.array(z.string().min(1))
           .describe('One short category label per title (e.g. "lighting", "jacket", "rug"), in the same order as the input titles'),
       }),
       system: `You label shopping product titles with a short category (one or two words) describing what kind of item each one is — judge by what the item actually is, not by guessing from a fixed list. Return a JSON object with a "categories" array: exactly one label per title, same order as the input titles.`,
       prompt: JSON.stringify(titles),
     })
-    return object.categories
+    if (object.categories.length !== titles.length) {
+      console.warn(`[productCategorizer] Model returned ${object.categories.length} categories for ${titles.length} titles, reconciling by index`)
+    }
+    return titles.map((_, i) => object.categories[i] ?? 'general')
   } catch (err) {
     console.error('[productCategorizer] Failed, falling back to "general" for all:', err)
     return titles.map(() => 'general')
