@@ -1,10 +1,16 @@
 /**
  * AI-powered search query generator.
- * Given a vibe profile and user request, generates 3-5 search queries
+ * Given a vibe profile and user request, generates search queries
  * for internet product search.
  */
 import { generateText } from 'ai'
 import { resolveAgentModel } from '@/lib/ai/providers'
+
+// Max search queries generated per shopping-agent turn. More queries means
+// broader catalog coverage but more Serper calls (and more categorizer/
+// resolveDirectProductUrl calls downstream) per turn — tune via env instead
+// of a code change.
+const MAX_QUERIES = Number(process.env.SEARCH_QUERY_COUNT ?? 5)
 
 export async function generateSearchQueries(
   vibeProfile: Record<string, unknown>,
@@ -19,7 +25,7 @@ export async function generateSearchQueries(
       model,
       system: `You are a product search query generator for a shopping AI.
 
-Given a vibe profile and a user request, generate 3-5 concise, specific search queries
+Given a vibe profile and a user request, generate up to ${MAX_QUERIES} concise, specific search queries
 that would find relevant products on an online store (e.g., Amazon, Google Shopping).
 
 Rules:
@@ -38,7 +44,7 @@ User request: ${userRequest}`,
     const text = result.text.trim()
     const jsonMatch = text.match(/\[[\s\S]*\]/)
     if (jsonMatch) {
-      const queries = JSON.parse(jsonMatch[0]) as string[]
+      const queries = (JSON.parse(jsonMatch[0]) as string[]).slice(0, MAX_QUERIES)
       console.log(`[searchQueryGenerator] Generated ${queries.length} queries`)
       return queries
     }
@@ -73,12 +79,12 @@ function fallbackQueries(
   const vibeTermArray = Array.from(terms)
 
   const queries: string[] = []
-  for (let i = 0; i < Math.min(3, vibeTermArray.length); i++) {
+  for (let i = 0; i < Math.min(MAX_QUERIES, vibeTermArray.length); i++) {
     queries.push(`${vibeTermArray[i]} ${userWords[0] ?? ''}`.trim())
   }
   if (queries.length === 0) {
     queries.push(userRequest)
   }
 
-  return queries.slice(0, 5)
+  return queries.slice(0, MAX_QUERIES)
 }

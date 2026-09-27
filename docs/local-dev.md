@@ -24,6 +24,8 @@ Fill in `apps/web/.env.local`:
 | `AGENT_PROVIDER` | no | defaults to the OpenRouter provider |
 | `AGENT_MODEL_ID` | no | has a built-in default per provider |
 | `SERPER_API_KEY` | yes | internet product search |
+| `SEARCH_QUERY_COUNT` | no | defaults `5` — max search queries generated per shopping-agent turn |
+| `SEARCH_ITEMS_PER_QUERY` | no | defaults `10` — max products fetched per search query |
 | `ML_SERVICE_URL` | no | defaults `http://localhost:8000` |
 | `BROWSER_SERVICE_URL` | no | defaults `http://localhost:8100` |
 | `STRIPE_STORE_A_TEST_SECRET_KEY` / `STRIPE_STORE_B_TEST_SECRET_KEY` | yes | demo Stripe checkout, one per seeded merchant |

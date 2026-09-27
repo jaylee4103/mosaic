@@ -6,6 +6,11 @@ import { categorizeProducts } from '@/lib/ai/productCategorizer'
 
 const SERPER_API_KEY = process.env.SERPER_API_KEY
 
+// Shopping results requested per query. Serper sometimes returns more than
+// this regardless (observed up to 40 even when set to 10) — treated as a
+// request hint, not a hard cap. Tune via env instead of a code change.
+const ITEMS_PER_QUERY = Number(process.env.SEARCH_ITEMS_PER_QUERY ?? 10)
+
 interface SerperShoppingResult {
   title: string
   source: string
@@ -38,7 +43,7 @@ export async function searchInternet(
   try {
     const body: Record<string, unknown> = {
       q: query,
-      num: 10,
+      num: ITEMS_PER_QUERY,
       gl: 'us',
       hl: 'en',
     }
@@ -70,7 +75,10 @@ export async function searchInternet(
       return []
     }
 
-    const validResults = shoppingResults.filter((item) => item.title && item.link)
+    // Serper's num param is a hint, not a hard cap (observed returning up to
+    // 40 results even when set to 10) — slice explicitly so the env var
+    // actually controls the count regardless of what Serper decides to send.
+    const validResults = shoppingResults.filter((item) => item.title && item.link).slice(0, ITEMS_PER_QUERY)
 
     // One batched classification call per query's result set, not per product.
     const categories = category
