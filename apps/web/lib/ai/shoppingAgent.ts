@@ -4,6 +4,8 @@ import { getVibeProfile } from '@/lib/server/vibe-profile'
 import { runAgentTurn } from './harness'
 import { resolveAgentModel, type AgentModelConfig } from './providers'
 import { createShoppingTools } from './tools/shoppingTools'
+import { performSearch } from '@/lib/server/searchOrchestrator'
+import { getSupabaseAdmin } from '@/lib/server/supabase'
 
 // The concrete "shopping agent" the root README describes — composes the
 // generic harness (harness.ts) with the shopping tool set (tools/) and a
@@ -38,10 +40,23 @@ export async function runShoppingAgentTurn(input: ShoppingAgentTurnInput): Promi
   const { guestId, boardId, userMessage, conversationHistory = [], model } = input
   console.log(`[shopping-agent] turn start: boardId=${boardId} message=${JSON.stringify(userMessage)}`)
 
+  const db = getSupabaseAdmin()
+
   const [vibeProfile, cart] = await Promise.all([
     getVibeProfile(guestId, boardId).catch(() => null),
     getCart(guestId, boardId),
   ])
+
+  // Proactively search the internet based on vibe terms
+  // This populates the Postgres cache before the agent tool loop begins
+  if (vibeProfile) {
+    try {
+      await performSearch(vibeProfile, userMessage, guestId, db)
+    } catch (err) {
+      console.error('[shopping-agent] Internet search failed, continuing with cached/local results:', err)
+    }
+  }
+
   const vibePhrase = (vibeProfile?.profile as { phrase?: unknown } | undefined)?.phrase ?? null
   console.log(
     `[shopping-agent] context loaded: vibePhrase=${JSON.stringify(vibePhrase)} cartItems=${cart.items.length} budgetCents=${cart.budgetCents}`,

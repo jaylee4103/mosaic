@@ -5,6 +5,7 @@ import { applyCartActions, type CartAction } from '@/lib/server/cart-actions'
 import { searchProducts } from '@/lib/server/products'
 import { dropAlternates, popNextAlternate, storeAlternates } from '@/lib/server/agent-alternates'
 import { getSupabaseAdmin } from '@/lib/server/supabase'
+import { performSearch } from '@/lib/server/searchOrchestrator'
 
 // Cap on how many search results we treat as "close enough to the vibe to
 // keep as fallback candidates" — the top pick gets added, the rest are
@@ -64,7 +65,24 @@ export function createShoppingTools(
         maxPriceCents: z.number().int().positive().optional(),
       }),
       execute: logged('search_products', async ({ query, category, maxPriceCents }) => {
+        // Check if cached results exist
         const products = (await searchProducts({ query, category, maxPriceCents }, db)).slice(0, CANDIDATE_POOL_SIZE)
+
+        // Cache miss: trigger internet search, re-cache, then return results
+        if (products.length === 0) {
+          console.log(`[shopping-tools] Cache miss for "${query}", triggering internet search...`)
+          try {
+            const vibeProfile = await db.from('vibe_profiles').select('profile_json').eq('board_id', boardId).maybeSingle()
+            if ((vibeProfile as { data: { profile_json: Record<string, unknown> } } | null)?.data) {
+              const vp = (vibeProfile as { data: { profile_json: Record<string, unknown> } }).data.profile_json
+              await performSearch({ profile: vp, name: '', description: null, updatedAt: '' } as any, query, guestId, db)
+            }
+          } catch (err) {
+            console.error('[shopping-tools] Internet search failed:', err)
+          }
+          return (await searchProducts({ query, category, maxPriceCents }, db)).slice(0, CANDIDATE_POOL_SIZE)
+        }
+
         lastSearchCandidateIds = products.map((p) => p.id)
         return products.map((p) => ({
           productId: p.id,
