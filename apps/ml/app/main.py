@@ -12,10 +12,9 @@ from contextlib import asynccontextmanager
 from app.routes import mock, vibe, browse
 from app.services.browser_service import close_browser
 
-@asynccontextmanager@asynccontextmanager
-asyncasync defdef lifespanlifespan(app:app: FastAPIFastAPI)::
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     yield
-    await close_browseryield
     await close_browser()
 
 app = FastAPI(
