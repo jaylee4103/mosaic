@@ -101,10 +101,13 @@ function ProductThumb({ item, size = 48, onOpen }: { item: CartItem; size?: numb
   );
 }
 
-// Links to the merchant page when one exists.
-function ProductLink({ url, className, children }: { url: string | null | undefined; className: string; children: React.ReactNode }) {
-  if (!url) return <div className={className}>{children}</div>;
-  return <a href={url} target="_blank" rel="noreferrer" className={`${className} hover:underline`}>{children}</a>;
+// Links through /api/products/[productId]/link (a redirect) instead of the
+// item's raw stored productUrl — that's frequently a Google Shopping
+// interstitial for internet-sourced products (see internetSearch.ts), not
+// the merchant's actual page. The redirect route resolves the real one.
+function ProductLink({ productId, hasUrl, className, children }: { productId: string; hasUrl: boolean; className: string; children: React.ReactNode }) {
+  if (!hasUrl) return <div className={className}>{children}</div>;
+  return <a href={`/api/products/${encodeURIComponent(productId)}/link`} target="_blank" rel="noreferrer" className={`${className} hover:underline`}>{children}</a>;
 }
 
 function ImageLightbox({ image, onClose }: { image: LightboxImage | null; onClose: () => void }) {
@@ -367,7 +370,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
               {message.products?.map((item) => (
                 <div key={item.id} className="flex items-center gap-2 rounded-xl bg-white/60 p-2">
                   <ProductThumb item={item} onOpen={setLightboxImage} />
-                  <ProductLink url={item.product?.productUrl} className="min-w-0">
+                  <ProductLink productId={item.productId} hasUrl={Boolean(item.product?.productUrl)} className="min-w-0">
                     <p className="truncate font-medium text-stone-900">{item.product?.name ?? "Unavailable product"}</p>
                     <p className="text-xs text-stone-600">{item.product ? money(item.product.priceCents, item.product.currency) : null}</p>
                   </ProductLink>
@@ -394,7 +397,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
             {cart.items.map((item) => <div key={item.id} className="border-b border-stone-100 pb-4 text-sm">
               <div className="flex gap-3">
                 <ProductThumb item={item} size={56} onOpen={setLightboxImage} />
-                <ProductLink url={item.product?.productUrl} className="min-w-0 flex-1">
+                <ProductLink productId={item.productId} hasUrl={Boolean(item.product?.productUrl)} className="min-w-0 flex-1">
                   <div className="flex justify-between gap-3"><p className="truncate font-medium text-stone-900">{item.product?.name ?? "Unavailable product"}</p><p className="whitespace-nowrap">{money(item.subtotalCents, cart.currency)}</p></div>
                   <p className="mt-1 text-xs text-stone-500">{item.product?.merchantName ?? "Merchant unavailable"}</p>
                 </ProductLink>

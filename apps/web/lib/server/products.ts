@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { isGoogleInterstitialUrl, resolveDirectProductUrl } from './internetSearch'
 import { getSupabaseAdmin } from './supabase'
 
 // This is the `searchProducts(query, category, maxPrice)` interface described
@@ -122,4 +123,33 @@ export async function getProductsByIds(
   if (error) throw new Error('Could not load products')
   const products = await attachMerchantNames((data ?? []) as ProductRow[], db)
   return new Map(products.map((product) => [product.id, product]))
+}
+
+// The cached productUrl for internet-sourced products is frequently a
+// Google Shopping interstitial, not the merchant's real page (see
+// internetSearch.ts — same reason run_merchant_checkout and browse_webpage
+// resolve it before acting). "View product" needs the same treatment: a
+// user clicking through should land on the actual retailer page, not
+// Google's aggregator. Resolved lazily on first view, then the resolution
+// is written back to products.product_url so later views for the same
+// product skip the extra Serper call.
+export async function resolveProductViewUrl(
+  productId: string,
+  db: SupabaseClient = getSupabaseAdmin(),
+): Promise<string | null> {
+  const { data, error } = await db.from('products').select('name, product_url, merchant_id').eq('id', productId).maybeSingle()
+  if (error) throw new Error('Could not look up product')
+  const row = data as { name: string; product_url: string | null; merchant_id: string } | null
+  if (!row?.product_url) return null
+  if (!isGoogleInterstitialUrl(row.product_url)) return row.product_url
+
+  const { data: merchantRow } = await db.from('merchants').select('name').eq('id', row.merchant_id).maybeSingle()
+  const merchantName = (merchantRow as { name: string } | null)?.name ?? ''
+  const resolved = await resolveDirectProductUrl(`${row.name} ${merchantName}`.trim())
+  if (!resolved) return null
+
+  const { error: updateError } = await db.from('products').update({ product_url: resolved }).eq('id', productId)
+  if (updateError) console.warn(`[products] Could not cache resolved URL for ${productId}:`, updateError.message)
+
+  return resolved
 }
