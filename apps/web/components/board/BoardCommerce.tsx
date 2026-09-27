@@ -438,7 +438,10 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
         {cart && cart.status === "open" && cart.items.length > 0 && <div className="mt-6 rounded-xl bg-[#f8f1e7] p-4">
           <h3 className="font-medium text-stone-900">Review checkout</h3>
           <p className="mt-1 text-xs text-stone-600">Demo-catalog items use Stripe test mode — you approve a separate hosted payment per merchant. Internet-sourced items instead get walked to their real checkout page and stopped right before payment, with a screenshot as proof. No real money moves either way.</p>
-          <button type="button" disabled={Boolean(busy)} onClick={() => void beginCheckout()} className="mt-3 w-full rounded-xl bg-stone-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40">{busy === "checkout" ? "Starting…" : "Start checkout"}</button>
+          <button type="button" disabled={Boolean(busy)} onClick={() => void beginCheckout()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40">
+            {busy === "checkout" && <Spinner className="text-white" />}
+            {busy === "checkout" ? "Starting…" : "Start checkout"}
+          </button>
         </div>}
 
         {activeCheckout && checkout && <div className="mt-6 border-t border-stone-200 pt-5">
@@ -462,5 +465,14 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
       </aside>
       <ImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
     </div>
+  );
+}
+
+function Spinner({ className = "" }: { className?: string }) {
+  return (
+    <svg className={`h-4 w-4 animate-spin ${className}`} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
   );
 }
