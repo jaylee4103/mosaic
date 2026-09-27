@@ -87,22 +87,17 @@ export async function searchInternet(
       ? validResults.map(() => category)
       : await categorizeProducts(validResults.map((item) => item.title))
 
-    // Serper's /shopping link and imageUrl are both Google-hosted proxies —
-    // a google.com/search?ibp=oshop interstitial and an
-    // encrypted-tbnN.gstatic.com thumbnail, never the merchant's own page or
-    // image. Resolved here, at cache time, not lazily on click: what's
-    // stored/shown anywhere downstream (search results, cart, "view
-    // product") must never be a Google link, so it can't be deferred to
-    // whichever caller happens to touch it first. Per-item failures are
-    // dropped rather than cached with a bad link — better to have fewer
-    // correct products than a full set with broken ones.
+    // Serper's /shopping link is a Google-hosted interstitial, resolved to
+    // the real merchant URL here at cache time. imageUrl falls back to
+    // Serper's gstatic thumbnail — always a real image — when scraping the
+    // merchant page's og:image fails or returns an HTML preview page.
     const resolved = await Promise.all(
       validResults.map(async (item, i) => {
         try {
           const merchantName = item.source || extractMerchant(item.link)
           const directUrl = await resolveDirectProductUrl(`${item.title} ${merchantName}`)
           if (!directUrl) return null
-          const imageUrl = await fetchOgImage(directUrl)
+          const imageUrl = (await fetchOgImage(directUrl)) ?? item.imageUrl ?? null
           return {
             title: item.title,
             priceCents: parsePrice(item.price ?? ''),
