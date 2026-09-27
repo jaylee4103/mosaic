@@ -31,10 +31,10 @@ export function CreateBoardModal({
     if (!list) return;
     const selected = Array.from(list);
     const invalid = selected.find((file) =>
-      !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024
+      !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 4 * 1024 * 1024
     );
     if (invalid) {
-      setError("Choose JPEG, PNG, or WebP images under 10 MB each.");
+      setError("Choose JPEG, PNG, or WebP images under 4 MB each.");
       return;
     }
     setError(null);

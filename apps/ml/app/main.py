@@ -1,12 +1,14 @@
 """FastAPI entrypoint for the Mosaic Vibe Detection ML Service."""
 
 import logging
+import hmac
+import os
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
 
 from app.routes import mock, vibe, browse
@@ -31,6 +33,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def require_service_token(request: Request, call_next):
+    """Protect ML and browser endpoints exposed through a public tunnel."""
+    expected = os.environ.get("ML_SERVICE_TOKEN")
+    if expected and request.url.path != "/health":
+        supplied = request.headers.get("authorization", "")
+        if not hmac.compare_digest(supplied, f"Bearer {expected}"):
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
 
 app.include_router(vibe.router, prefix="/api/vibe", tags=["vibe"])
 app.include_router(mock.router, prefix="/api/vibe/mock", tags=["mock"])

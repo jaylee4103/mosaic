@@ -58,7 +58,7 @@ Deletes the board, its images (DB rows and storage objects), and its vibe profil
 
 ### `POST /api/boards/:boardId/images`
 `multipart/form-data` with:
-- `image` (required): a JPEG, PNG, or WebP file, up to 10 MB.
+- `image` (required): a JPEG, PNG, or WebP file, up to 4 MB.
 - `note` (optional): a string annotation, e.g. "I like the colors, not the furniture."
 
 Response `201`, same shape as an entry in `GET /api/boards/:boardId`'s `images` array.

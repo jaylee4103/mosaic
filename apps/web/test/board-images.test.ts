@@ -31,7 +31,7 @@ test('addImage rejects disallowed mime types and oversized files', async () => {
     addImage(GUEST_ID, BOARD_ID, { mimeType: 'image/gif', bytes: new Uint8Array([1]) }, client),
   ).rejects.toMatchObject({ code: 'VALIDATION' })
 
-  const tooLarge = new Uint8Array(10 * 1024 * 1024 + 1)
+  const tooLarge = new Uint8Array(4 * 1024 * 1024 + 1)
   await expect(
     addImage(GUEST_ID, BOARD_ID, { mimeType: 'image/png', bytes: tooLarge }, client),
   ).rejects.toMatchObject({ code: 'VALIDATION' })
