@@ -4,6 +4,8 @@ import { getVibeProfile } from '@/lib/server/vibe-profile'
 import { runAgentTurn } from './harness'
 import { resolveAgentModel, type AgentModelConfig } from './providers'
 import { createShoppingTools } from './tools/shoppingTools'
+import { performSearch } from '@/lib/server/searchOrchestrator'
+import { getSupabaseAdmin } from '@/lib/server/supabase'
 
 // The concrete "shopping agent" the root README describes — composes the
 // generic harness (harness.ts) with the shopping tool set (tools/) and a
@@ -20,6 +22,7 @@ Rules:
 - When the user wants to replace something already in the cart ("swap this out", "show me something else"), use swap_item first — it reuses close candidates from the original search instead of a fresh one. Only fall back to search_products + replace_item if swap_item reports no alternatives left.
 - Respect the budget if one is set. If you can't find something that fits, say so rather than adding something over budget.
 - If nothing in the catalog is a good match, say so rather than adding a weak match just to have added something.
+- Use browse_webpage to navigate to product pages (from search_products results) when you need to check details, reviews, availability, or descriptions that aren't in the search snippet. Use browse_summary for a quicker overview with just the title and price.
 - Keep your final reply short and concrete: what changed and why.`
 
 export type ShoppingAgentTurnInput = {
@@ -40,10 +43,23 @@ export async function runShoppingAgentTurn(input: ShoppingAgentTurnInput): Promi
   const { guestId, boardId, userMessage, conversationHistory = [], model } = input
   console.log(`[shopping-agent] turn start: boardId=${boardId} message=${JSON.stringify(userMessage)}`)
 
+  const db = getSupabaseAdmin()
+
   const [vibeProfile, cart] = await Promise.all([
     getVibeProfile(guestId, boardId).catch(() => null),
     getCart(guestId, boardId),
   ])
+
+  // Proactively search the internet based on vibe terms
+  // This populates the Postgres cache before the agent tool loop begins
+  if (vibeProfile) {
+    try {
+      await performSearch(vibeProfile, userMessage, guestId, db)
+    } catch (err) {
+      console.error('[shopping-agent] Internet search failed, continuing with cached/local results:', err)
+    }
+  }
+
   const vibePhrase = (vibeProfile?.profile as { phrase?: unknown } | undefined)?.phrase ?? null
   console.log(
     `[shopping-agent] context loaded: vibePhrase=${JSON.stringify(vibePhrase)} cartItems=${cart.items.length} budgetCents=${cart.budgetCents}`,

@@ -7,25 +7,27 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from contextlib import asynccontextmanager
 
-from app.routes import mock, vibe
+from app.routes import mock, vibe, browse
+from app.services.browser_service import close_browser
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
+@asynccontextmanager@asynccontextmanager
+asyncasync defdef lifespanlifespan(app:app: FastAPIFastAPI)::
+    yield
+    await close_browseryield
+    await close_browser()
 
 app = FastAPI(
     title="Mosaic Vibe Detection",
     description="AI-powered vibe extraction from image sets",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,6 +35,7 @@ app.add_middleware(
 
 app.include_router(vibe.router, prefix="/api/vibe", tags=["vibe"])
 app.include_router(mock.router, prefix="/api/vibe/mock", tags=["mock"])
+app.include_router(browse.router, prefix="/api", tags=["browser"])
 
 # Serve the test frontend
 static_dir = Path(__file__).parent.parent / "static"
