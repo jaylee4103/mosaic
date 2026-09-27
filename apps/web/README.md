@@ -17,6 +17,7 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 | `PATCH /api/boards/:boardId/images/:imageId` | Update an image's note or position |
 | `DELETE /api/boards/:boardId/images/:imageId` | Delete an image and its storage object |
 | `POST /api/boards/:boardId/analyze` | Analyze the guest's stored private images with the ML service and save the Vibe Profile |
+| `POST /api/boards/:boardId/analyze/mock` | Save a sample Vibe Profile from the ML mock endpoint (`{ "scenario": "mediterranean" | "alpine" | "random" }`) |
 | `GET /api/boards/:boardId/vibe-profile` | Get the board's saved vibe profile |
 | `PUT /api/boards/:boardId/vibe-profile` | Save the AI service's vibe result for a board (upsert) |
 | `GET /api/products/search` | Search the demo product catalog by `query`, `category`, `maxPrice` (no guest cookie needed) |
@@ -42,6 +43,8 @@ Copy `.env.example` to `.env.local` and set the Supabase project URL and **secre
 See `../../docs/board-commerce-api.md` for the board, image, vibe profile, product, cart, and checkout request/response contract.
 
 Set `ML_SERVICE_URL` to the `apps/ml` service origin to enable board analysis (for local development, `http://127.0.0.1:8000`). The route downloads images server-side and returns the saved Vibe Profile; the browser does not need Supabase storage access.
+
+The board UI also offers Mediterranean and Alpine sample profile buttons backed by `apps/ml`'s mock endpoint. These samples ignore uploaded images and replace the board's saved Vibe Profile, so use the regular analysis route to get a profile from the actual images. The mock path is useful when the real model is unavailable during UI work.
 
 Run `bun run seed:products` to (re-)populate the two-store demo product catalog that `/api/products/search` reads from.
 

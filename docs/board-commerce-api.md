@@ -80,6 +80,9 @@ Reads the current guest's private board images, sends them to `apps/ml`'s `POST 
 ```
 An empty board returns `400 VALIDATION`; an unreachable or invalid ML response returns `503 ML_UNAVAILABLE`. If images or notes change during analysis, the endpoint returns `409 BOARD_CHANGED` instead of saving a stale result. The ML service currently analyzes image pixels; image notes are stored on the board but are not yet part of its analysis model.
 
+### `POST /api/boards/:boardId/analyze/mock`
+Request JSON: `{ "scenario": "mediterranean" }`, `{ "scenario": "alpine" }`, or `{ "scenario": "random" }`. The server calls `apps/ml`'s `POST /api/vibe/mock/analyze?scenario=...` and saves its sample Vibe Profile. Response matches `POST /analyze`: `{ "vibeProfile": { ... } }`. No board images are required; the ML mock ignores uploaded images. This overwrites any existing saved profile, and the result should be treated as demo data. Invalid scenarios return `400 VALIDATION`; an unavailable or invalid mock response returns `503 ML_UNAVAILABLE`.
+
 ### `GET /api/boards/:boardId/vibe-profile`
 Response `200`:
 ```json

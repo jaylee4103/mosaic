@@ -17,6 +17,7 @@ interface BoardsContextValue {
   createBoard: (input: CreateBoardInput) => Promise<Board>;
   addImages: (boardId: string, files: File[]) => Promise<void>;
   analyzeBoard: (boardId: string) => Promise<void>;
+  previewVibe: (boardId: string, scenario: "mediterranean" | "alpine") => Promise<void>;
   deleteBoard: (boardId: string) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -81,6 +82,14 @@ export function BoardsProvider({ children }: { children: React.ReactNode }) {
     [refresh]
   );
 
+  const previewVibe = useCallback(
+    async (boardId: string, scenario: "mediterranean" | "alpine") => {
+      await store.previewVibe(boardId, scenario);
+      await refresh();
+    },
+    [refresh]
+  );
+
   const removeBoard = useCallback(
     async (boardId: string) => {
       await store.deleteBoard(boardId);
@@ -98,6 +107,7 @@ export function BoardsProvider({ children }: { children: React.ReactNode }) {
         createBoard,
         addImages,
         analyzeBoard,
+        previewVibe,
         deleteBoard: removeBoard,
         refresh,
       }}

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { analyzeBoard, applyCartActions, createBoard, getBoards, getCart, getCheckout, preparePayments, refreshPayments, searchProducts, setCartBudget, startCheckout } from '../lib/boards/store'
+import { analyzeBoard, applyCartActions, createBoard, getBoards, getCart, getCheckout, preparePayments, previewVibe, refreshPayments, searchProducts, setCartBudget, startCheckout } from '../lib/boards/store'
 
 const originalFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = originalFetch })
@@ -117,4 +117,15 @@ test('simultaneous UI cart loads share one request', async () => {
   complete(Response.json({ id: 'cart-1', items: [], totalCents: 0 }))
   expect((await first).id).toBe('cart-1')
   expect((await second).id).toBe('cart-1')
+})
+
+test('sample vibe UI calls the board mock analysis route', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    expect(String(input)).toBe('/api/boards/board-1/analyze/mock')
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(String(init?.body))).toEqual({ scenario: 'alpine' })
+    return Response.json({ vibeProfile: { name: 'Alpine' } })
+  }) as typeof fetch
+
+  await previewVibe('board-1', 'alpine')
 })

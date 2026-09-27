@@ -147,6 +147,12 @@ export async function analyzeBoard(boardId: string): Promise<void> {
   await request(`/api/boards/${encodeURIComponent(boardId)}/analyze`, { method: "POST" });
 }
 
+export async function previewVibe(boardId: string, scenario: "mediterranean" | "alpine"): Promise<void> {
+  await request(`/api/boards/${encodeURIComponent(boardId)}/analyze/mock`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scenario }),
+  });
+}
+
 export async function deleteBoard(boardId: string): Promise<void> {
   await request(`/api/boards/${encodeURIComponent(boardId)}`, { method: "DELETE" });
 }

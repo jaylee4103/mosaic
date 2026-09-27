@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { analyzeBoard } from '../lib/server/board-analysis'
+import { analyzeBoard, analyzeBoardMock } from '../lib/server/board-analysis'
 import { addImage } from '../lib/server/board-images'
 import { createFakeSupabase } from './support/fake-supabase'
 
@@ -63,5 +63,33 @@ test('analysis refuses to save a vibe after the board images change', async () =
     return Response.json({ vibe: VIBE })
   }
   await expect(analyzeBoard(GUEST_ID, BOARD_ID, client, fetcher, 'http://ml.local')).rejects.toMatchObject({ code: 'BOARD_CHANGED' })
+  expect(tables.vibe_profiles).toHaveLength(0)
+})
+
+test('mock analysis saves an ML sample profile without board images', async () => {
+  const { client, tables } = ownedBoard()
+  const fetcher = async (url: string, options: RequestInit) => {
+    expect(url).toBe('http://ml.local/api/vibe/mock/analyze?scenario=mediterranean')
+    expect(options.method).toBe('POST')
+    expect(options.body).toBeInstanceOf(FormData)
+    return Response.json({ vibe: VIBE })
+  }
+
+  const profile = await analyzeBoardMock(GUEST_ID, BOARD_ID, 'mediterranean', client, fetcher, 'http://ml.local')
+  expect(profile.profile).toEqual(VIBE)
+  expect(tables.vibe_profiles).toHaveLength(1)
+})
+
+test('mock analysis rejects invalid scenarios and other guests before calling ML', async () => {
+  const { client } = ownedBoard()
+  const unused = async () => { throw new Error('ML must not be called') }
+  await expect(analyzeBoardMock(GUEST_ID, BOARD_ID, 'unknown', client, unused, 'http://ml.local')).rejects.toMatchObject({ code: 'VALIDATION' })
+  await expect(analyzeBoardMock('other-guest', BOARD_ID, 'alpine', client, unused, 'http://ml.local')).rejects.toMatchObject({ code: 'NOT_FOUND' })
+})
+
+test('mock analysis does not save an invalid ML response', async () => {
+  const { client, tables } = ownedBoard()
+  const fetcher = async () => Response.json({ vibe: { phrase: 'No facets' } })
+  await expect(analyzeBoardMock(GUEST_ID, BOARD_ID, 'alpine', client, fetcher, 'http://ml.local')).rejects.toMatchObject({ code: 'ML_UNAVAILABLE' })
   expect(tables.vibe_profiles).toHaveLength(0)
 })

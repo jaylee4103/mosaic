@@ -7,15 +7,17 @@ import { useBoards } from "@/lib/boards/useBoards";
 import { BoardCommerce } from "./BoardCommerce";
 
 export function BoardDetail({ boardId }: { boardId: string }) {
-  const { boards, loading, addImages, analyzeBoard } = useBoards();
+  const { boards, loading, addImages, analyzeBoard, previewVibe } = useBoards();
   const router = useRouter();
   const [analysisState, setAnalysisState] = useState<"idle" | "running">("idle");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [retryScenario, setRetryScenario] = useState<"mediterranean" | "alpine" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const attemptedAnalysis = useRef<string | null>(null);
   const board = boards.find((item) => item.id === boardId);
 
   const runAnalysis = useCallback(async () => {
+    setRetryScenario(null);
     setAnalysisState("running");
     setAnalysisError(null);
     try {
@@ -42,6 +44,19 @@ export function BoardDetail({ boardId }: { boardId: string }) {
       await runAnalysis();
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "Could not upload images");
+    }
+  }
+
+  async function handlePreview(scenario: "mediterranean" | "alpine") {
+    setRetryScenario(scenario);
+    setAnalysisState("running");
+    setAnalysisError(null);
+    try {
+      await previewVibe(boardId, scenario);
+    } catch (cause) {
+      setAnalysisError(cause instanceof Error ? cause.message : "Could not load a sample vibe");
+    } finally {
+      setAnalysisState("idle");
     }
   }
 
@@ -87,15 +102,24 @@ export function BoardDetail({ boardId }: { boardId: string }) {
           </div>
         ) : (
           <p className="mt-3 text-sm text-stone-600">
-            {analysisState === "running" ? "Analyzing your images…" : "No vibe profile yet."}
+            {analysisState === "running"
+              ? retryScenario ? "Loading sample vibe…" : "Analyzing your images…"
+              : "No vibe profile yet."}
           </p>
         )}
 
         {analysisError && (
           <p role="alert" className="mt-3 text-sm text-red-700">
-            {analysisError} <button className="underline" onClick={() => void runAnalysis()}>Retry analysis</button>
+            {analysisError} <button className="underline" onClick={() => void (retryScenario ? handlePreview(retryScenario) : runAnalysis())}>Retry analysis</button>
           </p>
         )}
+
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-stone-600">
+          <span>Try an ML sample profile:</span>
+          <button type="button" disabled={analysisState === "running"} onClick={() => void handlePreview("mediterranean")} className="rounded-full border border-stone-300 px-3 py-1.5 text-stone-800 disabled:opacity-40">Mediterranean</button>
+          <button type="button" disabled={analysisState === "running"} onClick={() => void handlePreview("alpine")} className="rounded-full border border-stone-300 px-3 py-1.5 text-stone-800 disabled:opacity-40">Alpine</button>
+          <span>Demo output, independent of uploaded images.</span>
+        </div>
 
         <label className="mt-4 inline-block cursor-pointer text-sm text-stone-700 underline">
           Add more images

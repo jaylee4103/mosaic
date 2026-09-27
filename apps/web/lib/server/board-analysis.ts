@@ -12,15 +12,52 @@ function serviceError(message: string): Error {
   return Object.assign(new Error(message), { code: 'ML_UNAVAILABLE' })
 }
 
-function analysisUrl(baseUrl: string | undefined): string {
+function analysisUrl(baseUrl: string | undefined, path = '/api/vibe/analyze'): string {
   if (!baseUrl) throw serviceError('ML_SERVICE_URL is not configured')
   try {
     const base = new URL(baseUrl)
     if (base.protocol !== 'http:' && base.protocol !== 'https:') throw new Error('Unsupported protocol')
-    return new URL('/api/vibe/analyze', base).toString()
+    return new URL(path, base).toString()
   } catch {
     throw serviceError('ML_SERVICE_URL must be an HTTP or HTTPS origin')
   }
+}
+
+export type MockScenario = 'mediterranean' | 'alpine' | 'random'
+
+export async function analyzeBoardMock(
+  guestId: string,
+  boardId: string,
+  scenario: unknown,
+  db: SupabaseClient = getSupabaseAdmin(),
+  fetcher: AnalysisFetch = fetch,
+  mlServiceUrl: string | undefined = process.env.ML_SERVICE_URL,
+): Promise<VibeProfile> {
+  await assertBoardOwnership(guestId, boardId, db)
+  if (scenario !== 'mediterranean' && scenario !== 'alpine' && scenario !== 'random') {
+    throw validationError('scenario must be mediterranean, alpine, or random')
+  }
+  const url = new URL(analysisUrl(mlServiceUrl, '/api/vibe/mock/analyze'))
+  url.searchParams.set('scenario', scenario)
+
+  let response: Response
+  try {
+    response = await fetcher(url.toString(), {
+      method: 'POST',
+      body: new FormData(),
+      signal: AbortSignal.timeout(15_000),
+      cache: 'no-store',
+    })
+  } catch {
+    throw serviceError('The mock vibe service could not be reached')
+  }
+  if (!response.ok) throw serviceError('The mock vibe service could not create a profile')
+
+  const result: unknown = await response.json().catch(() => null)
+  if (typeof result !== 'object' || result === null || !('vibe' in result) || !isVibeResult(result.vibe)) {
+    throw serviceError('The mock vibe service returned an invalid result')
+  }
+  return saveVibeProfile(guestId, boardId, result.vibe, db)
 }
 
 function isVibeResult(value: unknown): value is Record<string, unknown> {
