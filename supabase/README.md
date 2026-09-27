@@ -6,12 +6,14 @@ All three migrations were applied through the SQL Editor to the `mosaic` project
 
 The `mosaic-board-images` bucket is present in that project. It is private, has a 10 MB file limit, and accepts JPEG, PNG, and WebP.
 
+The `mosaic-checkout-proofs` bucket stores PNG screenshots from `run_merchant_checkout` (browser-driven checkout proof — see `.spec/browser-checkout-proof.md`). It is private and accepts PNG only.
+
 The demo catalog was seeded in that project with 2 test merchants and 14 products across home and fashion on September 26, 2026. Re-running `bun run seed:products` from `apps/web/` is safe because it upserts by merchant slug and product external ID.
 
 ## Set up another project
 
 1. Apply all SQL files in filename order in the project's SQL Editor.
-2. In Supabase Storage, create a private bucket named `mosaic-board-images`; restrict it to 10 MB JPEG, PNG, and WebP files.
+2. In Supabase Storage, create a private bucket named `mosaic-board-images`; restrict it to 10 MB JPEG, PNG, and WebP files. Also create a private bucket named `mosaic-checkout-proofs` restricted to PNG files.
 3. Copy `apps/web/.env.example` to `apps/web/.env.local` and set the project URL and a **secret** API key. Keep the key on the Next.js server; never use a `NEXT_PUBLIC_` variable for it.
 4. Start Next.js from `apps/web/`. `GET /api/guest` creates or resumes a guest session, and the demo checkout routes persist state in `demo_checkout_sessions`.
 

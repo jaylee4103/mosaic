@@ -7,6 +7,7 @@ import { dropAlternates, popNextAlternate, storeAlternates } from '@/lib/server/
 import { getSupabaseAdmin } from '@/lib/server/supabase'
 import { performSearch } from '@/lib/server/searchOrchestrator'
 import { browseWebpage, getPageSummary } from '@/lib/server/browser'
+import { runMerchantCheckout } from '@/lib/server/browserCheckout'
 
 // Cap on how many search results we treat as "close enough to the vibe to
 // keep as fallback candidates" — the top pick gets added, the rest are
@@ -111,6 +112,18 @@ export function createShoppingTools(
       inputSchema: z.object({ url: z.string().url().describe('The URL to summarize (from search_products productUrl)') }),
       execute: logged('browse_summary', async ({ url }) => {
         return await getPageSummary(url)
+      }),
+    }),
+
+    run_merchant_checkout: tool({
+      description: `Attempt to add a cart item's product to its merchant's real site cart and walk their checkout flow up to (but never past) the payment-submission step. Returns a screenshot proving the flow reached checkout, or an error if a step failed. Never completes a real purchase. Only works for products from merchants with browser-based checkout — the two demo merchants (Sol & Clay, North Loom) use the regular checkout flow instead and will reject this call.`,
+      inputSchema: z.object({ productId: z.string() }),
+      execute: logged('run_merchant_checkout', async ({ productId }) => {
+        try {
+          return { ok: true, proof: await runMerchantCheckout(guestId, boardId, productId, db) }
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) }
+        }
       }),
     }),
 
