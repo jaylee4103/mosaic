@@ -6,7 +6,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from './supabase'
 import type { InternetProduct } from './internetSearch'
-import type { Product } from './products'
 
 function uid(): string {
   return crypto.randomUUID()
@@ -91,41 +90,3 @@ export async function cacheSearchResults(
   return cached
 }
 
-export async function getCachedProducts(
-  query: string,
-  category?: string,
-  maxPriceCents?: number,
-  db: SupabaseClient = getSupabaseAdmin(),
-): Promise<Product[]> {
-  let request = db
-    .from('products')
-    .select('id, merchant_id, name, description, category, price_cents, currency, image_url, product_url, available, metadata, source')
-    .eq('available', true)
-
-  if (category) {
-    request = request.ilike('category', category)
-  }
-  if (maxPriceCents) {
-    request = request.lte('price_cents', maxPriceCents)
-  }
-
-  const { data, error } = await request
-  if (error) {
-    console.error('[productCache] Error fetching cached products:', error.message)
-    return []
-  }
-
-  return (data ?? []).map((row: any) => ({
-    id: row.id,
-    merchantId: row.merchant_id,
-    merchantName: '',
-    name: row.name,
-    description: row.description,
-    category: row.category,
-    priceCents: row.price_cents,
-    currency: row.currency,
-    imageUrl: row.image_url,
-    productUrl: row.product_url,
-    available: row.available,
-  }))
-}

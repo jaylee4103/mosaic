@@ -10,6 +10,7 @@ export type Product = {
   id: string
   merchantId: string
   merchantName: string
+  checkoutMethod: string
   name: string
   description: string | null
   category: string | null
@@ -41,11 +42,12 @@ type ProductRow = {
 
 const PRODUCT_COLUMNS = 'id, merchant_id, name, description, category, price_cents, currency, image_url, product_url, available'
 
-function mapProductRow(row: ProductRow, merchantName: string): Product {
+function mapProductRow(row: ProductRow, merchantName: string, checkoutMethod: string): Product {
   return {
     id: row.id,
     merchantId: row.merchant_id,
     merchantName,
+    checkoutMethod,
     name: row.name,
     description: row.description,
     category: row.category,
@@ -60,10 +62,15 @@ function mapProductRow(row: ProductRow, merchantName: string): Product {
 async function attachMerchantNames(rows: ProductRow[], db: SupabaseClient): Promise<Product[]> {
   if (rows.length === 0) return []
   const merchantIds = [...new Set(rows.map((row) => row.merchant_id))]
-  const { data, error } = await db.from('merchants').select('id, name').in('id', merchantIds)
+  const { data, error } = await db.from('merchants').select('id, name, checkout_method').in('id', merchantIds)
   if (error) throw new Error('Could not load merchants for products')
-  const nameById = new Map(((data ?? []) as Array<{ id: string; name: string }>).map((m) => [m.id, m.name]))
-  return rows.map((row) => mapProductRow(row, nameById.get(row.merchant_id) ?? 'Unknown merchant'))
+  const merchantById = new Map(
+    ((data ?? []) as Array<{ id: string; name: string; checkout_method: string }>).map((m) => [m.id, m]),
+  )
+  return rows.map((row) => {
+    const merchant = merchantById.get(row.merchant_id)
+    return mapProductRow(row, merchant?.name ?? 'Unknown merchant', merchant?.checkout_method ?? 'manual')
+  })
 }
 
 export async function searchProducts(
@@ -72,7 +79,6 @@ export async function searchProducts(
 ): Promise<Product[]> {
   let request = db.from('products').select(PRODUCT_COLUMNS).eq('available', true).order('name', { ascending: true })
 
-  if (filters.category) request = request.ilike('category', filters.category)
   if (typeof filters.maxPriceCents === 'number') request = request.lte('price_cents', filters.maxPriceCents)
   const { data, error } = await request
   if (error) throw new Error('Could not search products')
@@ -80,7 +86,19 @@ export async function searchProducts(
   // names, descriptions, and categories so a phrase such as "warm ceramic
   // lamp" can retrieve candidates for AI ranking. A larger provider should
   // replace this with indexed search while preserving the response contract.
-  const tokens = [...new Set(filters.query?.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])]
+  //
+  // `category` is folded into the token match instead of an exact `WHERE`
+  // filter: it's an inferred guess on both sides (the agent's freeform
+  // guess, and internetSearch.ts's keyword-based inference for cached
+  // internet products) — an exact match between two guessers is fragile by
+  // construction (e.g. agent says "clothing", cache inferred "general" for a
+  // jacket neither's keyword list covered), and a hard filter turns any such
+  // mismatch into a silent, permanent zero-result search.
+  const tokens = [
+    ...new Set(
+      `${filters.query ?? ''} ${filters.category ?? ''}`.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [],
+    ),
+  ]
   const candidates = ((data ?? []) as ProductRow[]).map((row) => {
     const searchable = `${row.name} ${row.description ?? ''} ${row.category ?? ''}`.toLowerCase()
     return { row, score: tokens.filter((token) => searchable.includes(token)).length }

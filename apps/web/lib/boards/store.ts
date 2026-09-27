@@ -13,9 +13,11 @@ export type Product = {
   id: string;
   name: string;
   merchantName: string;
+  checkoutMethod: string;
   priceCents: number;
   currency: string;
   imageUrl: string | null;
+  productUrl: string | null;
 };
 
 export type Cart = {
@@ -56,6 +58,20 @@ export type CartAction =
   | { type: "SET_BUDGET"; budgetCents: number | null };
 
 export type ShoppingReply = { assistantMessage: string; cart: Cart; steps: number };
+
+export type CheckoutProof = {
+  id: string;
+  boardId: string;
+  productId: string;
+  merchantId: string;
+  success: boolean;
+  stoppedReason: string;
+  finalUrl: string;
+  screenshotUrl: string | null;
+  steps: { step: string; success: boolean; url: string; detail: string | null }[];
+  error: string | null;
+  createdAt: string;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, cache: "no-store" });
@@ -239,4 +255,17 @@ export async function preparePayments(boardId: string): Promise<Checkout> {
 
 export async function refreshPayments(boardId: string): Promise<Checkout> {
   return request(`/api/boards/${encodeURIComponent(boardId)}/checkout/payments`);
+}
+
+export async function getCheckoutProofs(boardId: string): Promise<CheckoutProof[]> {
+  const { proofs } = await request<{ proofs: CheckoutProof[] }>(`/api/boards/${encodeURIComponent(boardId)}/checkout/proof`);
+  return proofs;
+}
+
+export async function runMerchantCheckout(boardId: string, productId: string): Promise<CheckoutProof> {
+  return request(`/api/boards/${encodeURIComponent(boardId)}/checkout/proof`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ productId }),
+  });
 }

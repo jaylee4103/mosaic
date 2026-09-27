@@ -64,38 +64,52 @@ export function createShoppingTools(
       inputSchema: z.object({
         query: z.string().optional().describe('Free-text search, e.g. "desk lamp"'),
         category: z.string().optional(),
-        maxPriceCents: z.number().int().positive().optional(),
+        // products.price_cents is a Postgres `integer` column (max 2147483647)
+        // — a model-supplied "no limit" sentinel like Number.MAX_SAFE_INTEGER
+        // makes PostgREST throw "integer out of range" on the filter, which
+        // otherwise escapes uncaught (see logged() below) and looks like a
+        // silent, unlogged failure. Capping here means it can't happen.
+        maxPriceCents: z.number().int().positive().max(2_147_483_647).optional(),
       }),
       execute: logged('search_products', async ({ query, category, maxPriceCents }) => {
-        // Check if cached results exist
-        const products = (await searchProducts({ query, category, maxPriceCents }, db)).slice(0, CANDIDATE_POOL_SIZE)
+        // Any thrown error here (e.g. a DB-level error) would otherwise
+        // escape uncaught: the ai SDK's tool-call loop swallows it into an
+        // error part with no log line at all, which is why this used to look
+        // like the tool silently returning nothing instead of a real error.
+        try {
+          // Check if cached results exist
+          const products = (await searchProducts({ query, category, maxPriceCents }, db)).slice(0, CANDIDATE_POOL_SIZE)
 
-        // Cache miss: trigger internet search, re-cache, then return results
-        if (products.length === 0) {
-          console.log(`[shopping-tools] Cache miss for "${query}", triggering internet search...`)
-          try {
-            const vibeProfile = await db.from('vibe_profiles').select('profile_json').eq('board_id', boardId).maybeSingle()
-            if ((vibeProfile as { data: { profile_json: Record<string, unknown> } } | null)?.data) {
-              const vp = (vibeProfile as { data: { profile_json: Record<string, unknown> } }).data.profile_json
-              await performSearch({ profile: vp, name: '', description: null, updatedAt: '' } as any, query ?? '', guestId, db)
+          // Cache miss: trigger internet search, re-cache, then return results
+          if (products.length === 0) {
+            console.log(`[shopping-tools] Cache miss for "${query}", triggering internet search...`)
+            try {
+              const vibeProfile = await db.from('vibe_profiles').select('profile_json').eq('board_id', boardId).maybeSingle()
+              if ((vibeProfile as { data: { profile_json: Record<string, unknown> } } | null)?.data) {
+                const vp = (vibeProfile as { data: { profile_json: Record<string, unknown> } }).data.profile_json
+                await performSearch({ profile: vp, name: '', description: null, updatedAt: '' } as any, query ?? '', guestId, db)
+              }
+            } catch (err) {
+              console.error('[shopping-tools] Internet search failed:', err)
             }
-          } catch (err) {
-            console.error('[shopping-tools] Internet search failed:', err)
+            return (await searchProducts({ query, category, maxPriceCents }, db)).slice(0, CANDIDATE_POOL_SIZE)
           }
-          return (await searchProducts({ query, category, maxPriceCents }, db)).slice(0, CANDIDATE_POOL_SIZE)
-        }
 
-        lastSearchCandidateIds = products.map((p) => p.id)
-        return products.map((p) => ({
-          productId: p.id,
-          name: p.name,
-          merchantName: p.merchantName,
-          priceCents: p.priceCents,
-          category: p.category,
-          description: p.description,
-          productUrl: p.productUrl,
-          imageUrl: p.imageUrl,
-        }))
+          lastSearchCandidateIds = products.map((p) => p.id)
+          return products.map((p) => ({
+            productId: p.id,
+            name: p.name,
+            merchantName: p.merchantName,
+            priceCents: p.priceCents,
+            category: p.category,
+            description: p.description,
+            productUrl: p.productUrl,
+            imageUrl: p.imageUrl,
+          }))
+        } catch (err) {
+          console.error('[shopping-tools] search_products failed:', err)
+          return []
+        }
       }),
     }),
 
