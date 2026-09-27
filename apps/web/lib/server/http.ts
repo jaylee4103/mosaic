@@ -16,7 +16,7 @@ export function routeError(error: unknown, guest?: GuestSession): Response {
       code === 'LINK_CLI_UNAVAILABLE' ? 501 :
         code === 'NOT_FOUND' ? 404 :
           code === 'VALIDATION' ? 400 :
-            code === 'ML_UNAVAILABLE' || code === 'AGENT_UNAVAILABLE' ? 503 : 502
+            code === 'ML_UNAVAILABLE' || code === 'AGENT_UNAVAILABLE' || code === 'BROWSER_SERVICE_UNAVAILABLE' ? 503 : 502
   const message = status === 502 ? 'Backend request failed' :
     error instanceof Error ? error.message : 'Request failed'
 

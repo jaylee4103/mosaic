@@ -9,7 +9,6 @@ import { getSupabaseAdmin } from './supabase'
 // See .spec/browser-checkout-proof.md. Mirrors board-images.ts's IMAGE_BUCKET pattern.
 export const CHECKOUT_PROOF_BUCKET = 'mosaic-checkout-proofs'
 const SIGNED_URL_TTL_SECONDS = 60 * 60
-const BROWSER_SERVICE_URL = process.env.BROWSER_SERVICE_URL ?? 'http://localhost:8100'
 
 function serviceError(message: string): Error {
   return Object.assign(new Error(message), { code: 'BROWSER_SERVICE_UNAVAILABLE' })
@@ -80,16 +79,20 @@ async function callBrowserService(
   merchant: MerchantRow,
   fetcher: typeof fetch,
 ): Promise<CheckoutFlowResponse> {
+  const serviceUrl = process.env.BROWSER_SERVICE_URL
+  const serviceToken = process.env.BROWSER_SERVICE_TOKEN
+  if (!serviceUrl || !serviceToken) throw serviceError('The browser checkout service is not configured')
   let response: Response
   try {
-    response = await fetcher(`${BROWSER_SERVICE_URL}/api/browse/checkout`, {
+    response = await fetcher(new URL('/api/browse/checkout', serviceUrl), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceToken}` },
       body: JSON.stringify({
         productUrl,
         addToCartSelectors: merchant.checkout_selectors?.addToCart,
         checkoutSelectors: merchant.checkout_selectors?.checkout,
       }),
+      signal: AbortSignal.timeout(75_000),
     })
   } catch {
     throw serviceError('The browser checkout service could not be reached')

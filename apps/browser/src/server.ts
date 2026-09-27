@@ -1,15 +1,18 @@
 import { z } from 'zod'
+import { isAuthorized } from './auth'
 import { closeBrowser } from './browserInstance'
 import { runCheckoutFlow } from './checkoutFlow'
 
 const CheckoutRequestSchema = z.object({
-  productUrl: z.string().url(),
+  productUrl: z.string().url().refine((value) => ['http:', 'https:'].includes(new URL(value).protocol)),
   quantity: z.number().int().positive().optional(),
   addToCartSelectors: z.array(z.string()).optional(),
   checkoutSelectors: z.array(z.string()).optional(),
 })
 
 const PORT = Number(process.env.PORT ?? 8100)
+const serviceToken = process.env.BROWSER_SERVICE_TOKEN
+if (!serviceToken) throw new Error('BROWSER_SERVICE_TOKEN is required')
 
 const server = Bun.serve({
   port: PORT,
@@ -23,6 +26,9 @@ const server = Bun.serve({
     }
 
     if (url.pathname === '/api/browse/checkout' && req.method === 'POST') {
+      if (!isAuthorized(req.headers.get('authorization'), serviceToken)) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 })
+      }
       let body: unknown
       try {
         body = await req.json()

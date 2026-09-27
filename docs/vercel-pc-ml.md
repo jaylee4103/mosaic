@@ -1,10 +1,10 @@
-# Vercel Next.js with ML on a Windows PC
+# Vercel Next.js with ML and checkout browser on a Windows PC
 
-Vercel hosts `apps/web` (including the shopping agent). The Windows PC keeps the CPU-based FastAPI ML container running. The optional Cloudflare Tunnel container forwards an HTTPS hostname to ML inside Compose. The web server sends a bearer token with every ML request; the ML service rejects requests without it. No router port forwarding is needed.
+Vercel hosts `apps/web` (including the shopping agent). The Windows PC keeps CPU-based FastAPI ML and the optional Bun/Playwright checkout browser running. Separate Cloudflare Tunnel containers forward HTTPS hostnames to ML and the browser inside Compose. Each service requires its own bearer token. No router port forwarding is needed.
 
 ## Prepare the PC
 
-Start from the deployment branch, which includes the latest `main` changes. Keep `apps/web/.env.local` and the root `.env` file on the PC; both are ignored by Git. Generate `ML_SERVICE_TOKEN` in the root `.env` as described in [Windows PC server setup](windows-pc-server.md). If that file already contains a token, keep it so the Vercel value continues to match.
+Start from the browser-service branch (or `main` after it is merged). Keep `apps/web/.env.local` and the root `.env` file on the PC; both are ignored by Git. Generate `ML_SERVICE_TOKEN` and a separate `BROWSER_SERVICE_TOKEN` in the root `.env` as described in [Windows PC server setup](windows-pc-server.md). Keep existing tokens so the Vercel values continue to match.
 
 In PowerShell, from the repository root:
 
@@ -38,14 +38,26 @@ Copy only the generated `https://....trycloudflare.com` URL. Anyone can reach th
 
 Stop public access with `docker compose --profile tunnel stop tunnel`.
 
+To expose browser-assisted checkout proof, start its separate service and Quick Tunnel:
+
+```powershell
+docker compose --profile browser up --build -d browser
+docker compose --profile browser --profile browser-tunnel up -d browser-tunnel
+docker compose --profile browser --profile browser-tunnel logs --tail=100 browser-tunnel
+```
+
+Copy only the **browser tunnel's** `https://....trycloudflare.com` URL into Vercel as `BROWSER_SERVICE_URL`. It differs from the ML tunnel URL. Unauthenticated checkout requests must return `401`; the browser service accepts only the private `BROWSER_SERVICE_TOKEN` from Next.js. Its `/health` endpoint remains public for checks. Stop public browser access with `docker compose --profile browser --profile browser-tunnel stop browser-tunnel`.
+
 ## Configure Vercel
 
-Use the existing Vercel `mosaic` project, which is already connected to GitHub with **Root Directory** set to `apps/web`. Push `vyang/feat-checkout-conversation-ui` for a Preview deployment until its changes are merged into `main`; keep the project's production branch on `main`. Set these **server-side** environment variables for the Preview environment in Vercel; do not add `NEXT_PUBLIC_` to any secret:
+Use the existing Vercel `mosaic` project, which is connected to GitHub with **Root Directory** set to `apps/web`. Push the browser-service branch for Preview until it is merged into `main`; keep the project's production branch on `main`. Set these **server-side** environment variables for Preview, and for Production once the branch is merged; do not add `NEXT_PUBLIC_` to any secret:
 
 | Variable | Value |
 | --- | --- |
 | `ML_SERVICE_URL` | The Cloudflare HTTPS origin, with no trailing path |
 | `ML_SERVICE_TOKEN` | The value of `ML_SERVICE_TOKEN` in the PC's ignored root `.env` |
+| `BROWSER_SERVICE_URL` | The **browser** Cloudflare HTTPS origin, with no trailing path |
+| `BROWSER_SERVICE_TOKEN` | The value of `BROWSER_SERVICE_TOKEN` in the PC's ignored root `.env` |
 | `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | Existing Mosaic Supabase server values |
 | `OPENROUTER_API_KEY` | Existing server key for the shopping agent |
 | `AGENT_PROVIDER`, `AGENT_MODEL_ID` | Same values as local `apps/web/.env.local` |
@@ -54,10 +66,12 @@ Use the existing Vercel `mosaic` project, which is already connected to GitHub w
 | `SERPER_API_KEY` | Optional, for internet product search |
 | `LINK_CLI_ENABLED` | `false` unless deliberately configured |
 
-The project already has an `OPENROUTER_API_KEY` for Preview; verify that it is the intended existing server key. Add the other values in the Vercel dashboard without placing them in Git or chat. Use the preview branch's exact URL for `APP_BASE_URL`. Redeploy after changing variables. If a Quick Tunnel URL changes, update `ML_SERVICE_URL` and redeploy. A stable named tunnel avoids this step.
+Check Preview and Production separately: a variable scoped only to Production is unavailable to Preview deployments. Set `OPENROUTER_API_KEY` and the other required server values in each environment where the shopping agent will run. Add the browser values in the Vercel dashboard without placing them in Git or chat. Use the preview branch's exact URL for Preview `APP_BASE_URL` and the public site origin for Production. Redeploy after changing variables. If either Quick Tunnel URL changes, update its corresponding service URL and redeploy. Stable named tunnels avoid this step.
+
+Before shopping or checkout proof can work, apply the pending `supabase/migrations/202609270001_agent_product_alternates.sql`, `202609270002_internet_search_source_column.sql`, and `202609270003_checkout_proofs.sql` to the existing Mosaic Supabase project in filename order. The first three September 26 migrations were already applied; do not rerun them. Create the private `mosaic-checkout-proofs` Storage bucket restricted to PNG images if it does not exist. See [Supabase setup](../supabase/README.md).
 
 ## Verify
 
 Open the Vercel `/boards` page. Create a disposable board, upload an image under 4 MB, and run real analysis. Vercel limits Function request bodies to 4.5 MB, so the app enforces a 4 MB image limit to leave room for multipart overhead. The browser uploads to the Vercel route; Next.js reads the private image from Supabase and sends it to ML through Cloudflare. Test a shopping request and Stripe test checkout separately. Keep the PC on, Docker Desktop running, and the tunnel connected while using the Vercel site.
 
-The merged `main` branch also adds browser-assisted checkout proof through a **separate** `apps/browser` service. It is not part of this two-service Compose setup, so that specific proof action needs its own deployment and `BROWSER_SERVICE_URL` before it can work on Vercel. The normal board analysis, shopping agent, cart, and Stripe test checkout use the setup above.
+Browser-assisted checkout proof is a separate action for merchants whose checkout method is `browser`; Stripe test checkout remains on the web server. The browser service stops before payment submission and returns a screenshot and step trace. Verify the browser tunnel rejects requests without its token before testing the agent action.
