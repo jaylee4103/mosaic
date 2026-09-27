@@ -53,7 +53,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
   }
 
   async function sendToAgent(message: string, displayText = message) {
-    if (!message.trim() || busy || cart?.status !== "open") return;
+    if (!message.trim() || busy || cart?.status !== "open") return false;
     setMessages((current) => [...current, { id: Date.now(), role: "shopper", text: displayText }]);
     setBusy("shop");
     setError(null);
@@ -61,13 +61,14 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
       const result = await shopWithAgent(boardId, message);
       setCart(result.cart);
       setBudgetInput(result.cart.budgetCents === null ? "" : String(result.cart.budgetCents / 100));
-      setQuery((current) => current.trim() === message ? "" : current);
       setMessages((current) => [...current, {
         id: Date.now() + 1, role: "mosaic",
         text: result.assistantMessage.trim() || "I reviewed your request. Check the cart for any changes.",
       }]);
+      return true;
     } catch (cause) {
       report(cause, "Could not shop for products");
+      return false;
     } finally {
       setBusy(null);
     }
@@ -75,7 +76,11 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
 
   async function submitMessage(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await sendToAgent(query.trim());
+    const message = query.trim();
+    if (!message || busy || cart?.status !== "open") return;
+    setQuery("");
+    const sent = await sendToAgent(message);
+    if (!sent) setQuery((current) => current || message);
   }
 
   async function changeItem(item: Cart["items"][number], action: "lock" | "remove" | "decrease" | "increase") {
