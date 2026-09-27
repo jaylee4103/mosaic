@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.routes import vibe
+from app.routes import mock, vibe
 
 # Configure logging
 logging.basicConfig(
@@ -32,6 +32,7 @@ app.add_middleware(
 )
 
 app.include_router(vibe.router, prefix="/api/vibe", tags=["vibe"])
+app.include_router(mock.router, prefix="/api/vibe/mock", tags=["mock"])
 
 # Serve the test frontend
 static_dir = Path(__file__).parent.parent / "static"
