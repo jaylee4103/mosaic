@@ -6,7 +6,7 @@
 -- is the item currently occupying that cart "slot", matching the existing
 -- productId-addressed CartAction scheme (see lib/server/cart-actions.ts)
 -- rather than introducing a new cart_item-based key.
-create table public.agent_product_alternates (
+create table if not exists public.agent_product_alternates (
   id uuid primary key default gen_random_uuid(),
   board_id uuid not null references public.boards(id) on delete cascade,
   product_id uuid not null references public.products(id) on delete cascade,

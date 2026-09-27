@@ -1,14 +1,14 @@
 -- Mosaic's API uses a server secret key. Browser roles have no direct access.
 create extension if not exists pgcrypto;
 
-create table public.guest_sessions (
+create table if not exists public.guest_sessions (
   id uuid primary key default gen_random_uuid(),
   token_hash text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
   expires_at timestamptz not null,
   created_at timestamptz not null default now()
 );
 
-create table public.boards (
+create table if not exists public.boards (
   id uuid primary key default gen_random_uuid(),
   guest_session_id uuid not null references public.guest_sessions(id) on delete cascade,
   name text not null check (char_length(name) between 1 and 120),
@@ -17,7 +17,7 @@ create table public.boards (
   unique (id, guest_session_id)
 );
 
-create table public.board_images (
+create table if not exists public.board_images (
   id uuid primary key default gen_random_uuid(),
   board_id uuid not null references public.boards(id) on delete cascade,
   storage_path text not null unique,
@@ -27,7 +27,7 @@ create table public.board_images (
   created_at timestamptz not null default now()
 );
 
-create table public.vibe_profiles (
+create table if not exists public.vibe_profiles (
   id uuid primary key default gen_random_uuid(),
   board_id uuid not null unique references public.boards(id) on delete cascade,
   name text not null,
@@ -37,7 +37,7 @@ create table public.vibe_profiles (
   updated_at timestamptz not null default now()
 );
 
-create table public.merchants (
+create table if not exists public.merchants (
   id uuid primary key default gen_random_uuid(),
   slug text not null unique,
   name text not null,
@@ -48,7 +48,7 @@ create table public.merchants (
   created_at timestamptz not null default now()
 );
 
-create table public.products (
+create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
   merchant_id uuid not null references public.merchants(id),
   external_id text not null,
@@ -65,7 +65,7 @@ create table public.products (
   unique (merchant_id, external_id)
 );
 
-create table public.carts (
+create table if not exists public.carts (
   id uuid primary key default gen_random_uuid(),
   guest_session_id uuid not null references public.guest_sessions(id) on delete cascade,
   board_id uuid,
@@ -80,7 +80,7 @@ create table public.carts (
     references public.boards(id, guest_session_id)
 );
 
-create table public.cart_items (
+create table if not exists public.cart_items (
   id uuid primary key default gen_random_uuid(),
   cart_id uuid not null references public.carts(id) on delete cascade,
   product_id uuid not null references public.products(id),
@@ -90,7 +90,7 @@ create table public.cart_items (
   unique (cart_id, product_id)
 );
 
-create table public.checkout_sessions (
+create table if not exists public.checkout_sessions (
   id uuid primary key default gen_random_uuid(),
   cart_id uuid not null,
   guest_session_id uuid not null references public.guest_sessions(id) on delete cascade,
@@ -107,7 +107,7 @@ create table public.checkout_sessions (
   unique (cart_id, client_request_id)
 );
 
-create table public.merchant_orders (
+create table if not exists public.merchant_orders (
   id uuid primary key default gen_random_uuid(),
   checkout_session_id uuid not null references public.checkout_sessions(id),
   merchant_id uuid not null references public.merchants(id),
@@ -126,7 +126,7 @@ create table public.merchant_orders (
   unique (checkout_session_id, merchant_id)
 );
 
-create table public.order_items (
+create table if not exists public.order_items (
   id uuid primary key default gen_random_uuid(),
   merchant_order_id uuid not null references public.merchant_orders(id),
   product_id uuid references public.products(id) on delete set null,
@@ -136,14 +136,14 @@ create table public.order_items (
   currency text not null check (currency ~ '^[a-z]{3}$')
 );
 
-create index boards_guest_session_idx on public.boards (guest_session_id);
-create index board_images_board_idx on public.board_images (board_id, position);
-create index products_merchant_idx on public.products (merchant_id, available);
-create index carts_guest_session_idx on public.carts (guest_session_id, status);
-create index cart_items_cart_idx on public.cart_items (cart_id);
-create index checkout_sessions_guest_idx on public.checkout_sessions (guest_session_id, created_at desc);
-create index merchant_orders_checkout_idx on public.merchant_orders (checkout_session_id);
-create index order_items_order_idx on public.order_items (merchant_order_id);
+create index if not exists boards_guest_session_idx on public.boards (guest_session_id);
+create index if not exists board_images_board_idx on public.board_images (board_id, position);
+create index if not exists products_merchant_idx on public.products (merchant_id, available);
+create index if not exists carts_guest_session_idx on public.carts (guest_session_id, status);
+create index if not exists cart_items_cart_idx on public.cart_items (cart_id);
+create index if not exists checkout_sessions_guest_idx on public.checkout_sessions (guest_session_id, created_at desc);
+create index if not exists merchant_orders_checkout_idx on public.merchant_orders (checkout_session_id);
+create index if not exists order_items_order_idx on public.order_items (merchant_order_id);
 
 alter table public.guest_sessions enable row level security;
 alter table public.boards enable row level security;
