@@ -45,7 +45,7 @@ export function CreateBoardModal({
   }
 
   async function handleSubmit() {
-    if (!name.trim() || files.length === 0) return;
+    if (!name.trim()) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -69,7 +69,7 @@ export function CreateBoardModal({
           new board
         </h2>
         <p className="mt-1 text-sm text-stone-500">
-          give it a name and drop in a few photos that capture the look.
+          give it a name. You can add inspiration photos now or later.
         </p>
 
         <input
@@ -119,7 +119,7 @@ export function CreateBoardModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!name.trim() || files.length === 0 || submitting}
+            disabled={!name.trim() || submitting}
             className="rounded-full bg-stone-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
           >
             {submitting ? "creating…" : "create board"}

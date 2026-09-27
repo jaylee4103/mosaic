@@ -49,17 +49,20 @@ type FakeSession = {
 
 function createFakePaymentStores() {
   const sessions = new Map<string, FakeSession>()
+  const returnPaths: string[] = []
   const byAttempt = new Map<string, FakeSession>()
   const verificationFailures = new Set<string>()
   let counter = 0
   return {
     sessions,
+    returnPaths,
     verificationFailures,
     async verifyDistinctAccounts() {},
     async accountFor(merchantId: string) {
       return { key: `key_${merchantId}`, accountId: `acct_${merchantId}` }
     },
-    async createSession(input: { merchantId: string; amount: number; currency: string; approvalId: string; retryOf?: string }): Promise<FakeSession> {
+    async createSession(input: { merchantId: string; amount: number; currency: string; approvalId: string; returnPath?: string; retryOf?: string }): Promise<FakeSession> {
+      if (input.returnPath) returnPaths.push(input.returnPath)
       const attemptKey = `${input.merchantId}:${input.retryOf ?? 'initial'}`
       const existing = byAttempt.get(attemptKey)
       if (existing) return existing
@@ -189,6 +192,7 @@ test('hosted checkout works without the local Link CLI and retains the original 
   const paymentStores = createFakePaymentStores()
   const prepared = await preparePayments(GUEST_ID, board.id, 'http://127.0.0.1:3000', client, { paymentStores, authorizer: null })
   expect([...paymentStores.sessions.values()].find((session) => session.merchantId === MERCHANT_A.slug)?.amount).toBe(5500)
+  expect(paymentStores.returnPaths).toEqual([`/boards/${board.id}`, `/boards/${board.id}`])
   expect(prepared.totalCents).toBe(17500)
 })
 

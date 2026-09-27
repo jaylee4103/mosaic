@@ -410,7 +410,7 @@ export async function preparePayments(
       currency: order.currency,
       approvalId: order.link_spend_request_id ?? '',
       baseUrl,
-      returnPath: `/api/boards/${boardId}/checkout/return`,
+      returnPath: `/boards/${encodeURIComponent(boardId)}`,
       retryOf: order.external_order_id ?? undefined,
     })
     await updateMerchantOrderRow(order.id, {

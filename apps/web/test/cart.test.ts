@@ -35,6 +35,17 @@ test('getCart auto-creates an empty cart for a board with no budget set', async 
   expect(cart.boardId).toBe(board.id)
 })
 
+test('getCart can recover a board with duplicate open carts from concurrent first reads', async () => {
+  const { client, tables } = seedWithCatalog()
+  const board = await createBoard(GUEST_ID, 'Concurrent board', client)
+  const first = await getCart(GUEST_ID, board.id, client)
+  tables.carts.push({ ...tables.carts[0], id: 'newer-cart', created_at: '2099-01-01T00:00:00Z' })
+
+  expect((await getCart(GUEST_ID, board.id, client)).id).toBe('newer-cart')
+  expect((await setCartBudget(GUEST_ID, board.id, { budgetCents: 10000 }, client)).id).toBe('newer-cart')
+  expect(first.id).not.toBe('newer-cart')
+})
+
 test('addCartItem prices the item from the live catalog, not the client', async () => {
   const { client } = seedWithCatalog()
   const board = await createBoard(GUEST_ID, 'Dream Apartment', client)

@@ -42,9 +42,13 @@ async function findOrCreateCartRow(guestId: string, boardId: string, db: Supabas
     .eq('board_id', boardId)
     .eq('guest_session_id', guestId)
     .in('status', ['open', 'checkout'])
-    .maybeSingle()
+    .order('created_at', { ascending: false })
   if (error) throw new Error('Could not look up cart')
-  if (data) return data as CartRow
+  // Older concurrent first reads may have created two open carts. Keep a
+  // checkout cart if one exists, otherwise use the newest open cart.
+  const rows = (data ?? []) as CartRow[]
+  const existing = rows.find((row) => row.status === 'checkout') ?? rows[0]
+  if (existing) return existing
 
   const { data: created, error: createError } = await db
     .from('carts')

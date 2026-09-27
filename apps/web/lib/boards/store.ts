@@ -19,10 +19,41 @@ export type Product = {
 };
 
 export type Cart = {
-  items: { id: string; productId: string; quantity: number }[];
+  id: string;
+  boardId: string;
+  budgetCents: number | null;
+  remainingCents: number | null;
+  status: "open" | "checkout" | "completed" | "abandoned";
+  items: { id: string; productId: string; quantity: number; locked: boolean; subtotalCents: number; product: Product | null }[];
   totalCents: number;
   currency: string;
 };
+
+export type Checkout = {
+  id: string;
+  boardId: string;
+  cartId: string;
+  status: string;
+  totalCents: number;
+  currency: string;
+  approvalMode: "hosted_checkout" | "link_cli";
+  merchantOrders: {
+    id: string;
+    merchantId: string;
+    merchantName: string;
+    amountCents: number;
+    paymentStatus: string;
+    paymentMethodType: string | null;
+    linkVerified: boolean;
+    errorMessage: string | null;
+    checkoutUrl?: string | null;
+  }[];
+};
+
+export type CartAction =
+  | { type: "LOCK" | "UNLOCK" | "REMOVE" | "ADD"; productId: string }
+  | { type: "REPLACE"; removeProductId: string; addProductId: string }
+  | { type: "SET_BUDGET"; budgetCents: number | null };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, cache: "no-store" });
@@ -120,14 +151,22 @@ export async function deleteBoard(boardId: string): Promise<void> {
   await request(`/api/boards/${encodeURIComponent(boardId)}`, { method: "DELETE" });
 }
 
-export async function searchProducts(query: string): Promise<Product[]> {
+export async function searchProducts(query: string, maxPriceCents?: number): Promise<Product[]> {
   const params = new URLSearchParams({ query });
+  if (maxPriceCents !== undefined) params.set("maxPrice", String(maxPriceCents));
   const { products } = await request<{ products: Product[] }>(`/api/products/search?${params}`);
   return products;
 }
 
-export async function getCart(boardId: string): Promise<Cart> {
-  return request<Cart>(`/api/boards/${encodeURIComponent(boardId)}/cart`);
+const inFlightCarts = new Map<string, Promise<Cart>>();
+
+export function getCart(boardId: string): Promise<Cart> {
+  const existing = inFlightCarts.get(boardId);
+  if (existing) return existing;
+  const pending = request<Cart>(`/api/boards/${encodeURIComponent(boardId)}/cart`)
+    .finally(() => inFlightCarts.delete(boardId));
+  inFlightCarts.set(boardId, pending);
+  return pending;
 }
 
 export async function addCartItem(boardId: string, productId: string): Promise<Cart> {
@@ -136,4 +175,46 @@ export async function addCartItem(boardId: string, productId: string): Promise<C
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ productId, quantity: 1 }),
   });
+}
+
+export async function updateCartItem(boardId: string, itemId: string, patch: { quantity?: number; locked?: boolean }): Promise<Cart> {
+  return request<Cart>(`/api/boards/${encodeURIComponent(boardId)}/cart/items/${encodeURIComponent(itemId)}`, {
+    method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(patch),
+  });
+}
+
+export async function removeCartItem(boardId: string, itemId: string): Promise<Cart> {
+  return request<Cart>(`/api/boards/${encodeURIComponent(boardId)}/cart/items/${encodeURIComponent(itemId)}`, { method: "DELETE" });
+}
+
+export async function setCartBudget(boardId: string, budgetCents: number | null): Promise<Cart> {
+  return request<Cart>(`/api/boards/${encodeURIComponent(boardId)}/cart`, {
+    method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ budgetCents }),
+  });
+}
+
+export async function applyCartActions(boardId: string, actions: CartAction[]): Promise<{ cart: Cart; results: { type: string; ok: boolean; error?: string }[] }> {
+  return request(`/api/boards/${encodeURIComponent(boardId)}/cart/actions`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ actions }),
+  });
+}
+
+export async function getCheckout(boardId: string): Promise<Checkout | null> {
+  const response = await fetch(`/api/boards/${encodeURIComponent(boardId)}/checkout`, { cache: "no-store" });
+  if (response.status === 404) return null;
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : `Request failed (${response.status})`);
+  return body as Checkout;
+}
+
+export async function startCheckout(boardId: string): Promise<Checkout> {
+  return request(`/api/boards/${encodeURIComponent(boardId)}/checkout`, { method: "POST" });
+}
+
+export async function preparePayments(boardId: string): Promise<Checkout> {
+  return request(`/api/boards/${encodeURIComponent(boardId)}/checkout/payments`, { method: "POST" });
+}
+
+export async function refreshPayments(boardId: string): Promise<Checkout> {
+  return request(`/api/boards/${encodeURIComponent(boardId)}/checkout/payments`);
 }

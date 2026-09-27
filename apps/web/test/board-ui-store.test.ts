@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { analyzeBoard, createBoard, getBoards } from '../lib/boards/store'
+import { analyzeBoard, applyCartActions, createBoard, getBoards, getCart, getCheckout, preparePayments, refreshPayments, searchProducts, setCartBudget, startCheckout } from '../lib/boards/store'
 
 const originalFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = originalFetch })
@@ -59,4 +59,62 @@ test('board UI creates a saved board, uploads images, and reads the real vibe pr
     'GET /api/boards',
     'GET /api/boards/board-1',
   ])
+})
+
+test('shopping UI calls catalog, cart action, and hosted checkout routes', async () => {
+  const calls: string[] = []
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input)
+    calls.push(`${init?.method ?? 'GET'} ${path}`)
+    if (path.startsWith('/api/products/search')) {
+      expect(new URLSearchParams(path.split('?')[1]).get('maxPrice')).toBe('30000')
+      return Response.json({ products: [{ id: 'lamp', name: 'Lamp' }] })
+    }
+    if (path.endsWith('/cart/actions')) {
+      expect(JSON.parse(String(init?.body))).toEqual({ actions: [{ type: 'LOCK', productId: 'lamp' }] })
+      return Response.json({ results: [{ type: 'LOCK', ok: true }], cart: { totalCents: 5500 } })
+    }
+    if (path.endsWith('/cart')) {
+      expect(JSON.parse(String(init?.body))).toEqual({ budgetCents: 30000 })
+      return Response.json({ totalCents: 5500, budgetCents: 30000 })
+    }
+    if (path.endsWith('/checkout/payments')) return Response.json({ id: 'checkout-1', status: 'partial', merchantOrders: [] })
+    if (path.endsWith('/checkout') && init?.method === 'POST') return Response.json({ id: 'checkout-1', status: 'approved', merchantOrders: [] })
+    if (path.endsWith('/checkout')) return Response.json({ id: 'checkout-1', status: 'approved', merchantOrders: [] })
+    throw new Error(`Unexpected request: ${path}`)
+  }) as typeof fetch
+
+  expect(await searchProducts('warm lamp', 30000)).toHaveLength(1)
+  expect((await setCartBudget('board-1', 30000)).budgetCents).toBe(30000)
+  expect((await applyCartActions('board-1', [{ type: 'LOCK', productId: 'lamp' }])).results[0].ok).toBe(true)
+  expect((await startCheckout('board-1')).id).toBe('checkout-1')
+  expect((await getCheckout('board-1'))?.id).toBe('checkout-1')
+  expect((await preparePayments('board-1')).status).toBe('partial')
+  expect((await refreshPayments('board-1')).status).toBe('partial')
+  expect(calls).toEqual([
+    'GET /api/products/search?query=warm+lamp&maxPrice=30000',
+    'PATCH /api/boards/board-1/cart',
+    'POST /api/boards/board-1/cart/actions',
+    'POST /api/boards/board-1/checkout',
+    'GET /api/boards/board-1/checkout',
+    'POST /api/boards/board-1/checkout/payments',
+    'GET /api/boards/board-1/checkout/payments',
+  ])
+})
+
+test('simultaneous UI cart loads share one request', async () => {
+  let calls = 0
+  let complete!: (response: Response) => void
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    expect(String(input)).toBe('/api/boards/board-concurrent/cart')
+    calls += 1
+    return new Promise<Response>((resolve) => { complete = resolve })
+  }) as typeof fetch
+
+  const first = getCart('board-concurrent')
+  const second = getCart('board-concurrent')
+  expect(calls).toBe(1)
+  complete(Response.json({ id: 'cart-1', items: [], totalCents: 0 }))
+  expect((await first).id).toBe('cart-1')
+  expect((await second).id).toBe('cart-1')
 })
