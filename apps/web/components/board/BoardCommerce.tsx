@@ -20,7 +20,11 @@ function money(cents: number, currency = "usd") {
 // actively running (agentActivity is set from the stream's tool-call
 // events) and disappears the instant real text starts arriving — it never
 // substitutes for genuine feedback, per "AI as copilot" transparency rules.
-const LOADING_WORDS = ["Vibing", "Sensing", "Scouting", "Curating", "Rummaging", "Cross-checking"];
+const LOADING_WORDS = [
+  "Vibing", "Sensing", "Scouting", "Curating", "Rummaging", "Cross-checking",
+  "Noodling", "Percolating", "Sniffing around", "Eyeballing options", "Daydreaming",
+  "Window shopping", "Mood-boarding", "Pondering", "Taste-testing", "Digging in",
+];
 const TOOL_LABELS: Record<string, string> = {
   search_products: "Searching the catalog",
   browse_webpage: "Reading a product page",
