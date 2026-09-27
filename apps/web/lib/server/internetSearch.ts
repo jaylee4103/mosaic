@@ -48,9 +48,8 @@ export async function searchInternet(
       hl: 'en',
     }
     if (maxPriceCents) {
-      const min = Math.floor(maxPriceCents / 100)
       const max = Math.ceil(maxPriceCents / 100)
-      body.price = `${min}-${max}`
+      body.price = `0-${max}`
     }
 
     const response = await fetch('https://google.serper.dev/shopping', {
@@ -78,7 +77,10 @@ export async function searchInternet(
     // Serper's num param is a hint, not a hard cap (observed returning up to
     // 40 results even when set to 10) — slice explicitly so the env var
     // actually controls the count regardless of what Serper decides to send.
-    const validResults = shoppingResults.filter((item) => item.title && item.link).slice(0, ITEMS_PER_QUERY)
+    const validResults = shoppingResults.filter((item) => item.title && item.link
+      && parsePrice(item.price ?? '') > 0
+      && (!maxPriceCents || parsePrice(item.price ?? '') <= maxPriceCents))
+      .slice(0, ITEMS_PER_QUERY)
 
     // One batched classification call per query's result set, not per product.
     const categories = category
@@ -128,9 +130,9 @@ export async function searchInternet(
 
 function parsePrice(price: string): number {
   // Shopping results give a single price per listing, e.g. "$24.99".
-  const match = price.match(/(\d+(?:\.\d+)?)/)
+  const match = price.match(/(\d[\d,]*(?:\.\d+)?)/)
   if (match) {
-    const dollars = parseFloat(match[1])
+    const dollars = parseFloat(match[1].replaceAll(',', ''))
     if (!isNaN(dollars)) return Math.round(dollars * 100)
   }
   return 0
