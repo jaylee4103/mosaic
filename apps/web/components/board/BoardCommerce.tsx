@@ -51,7 +51,7 @@ const TOOL_LABELS: Record<string, string> = {
 function AgentActivity({ toolName }: { toolName: string | null }) {
   const [wordIndex, setWordIndex] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setWordIndex((n) => (n + 1) % LOADING_WORDS.length), 1400);
+    const id = setInterval(() => setWordIndex((n) => (n + 1) % LOADING_WORDS.length), 2200);
     return () => clearInterval(id);
   }, []);
   const label = toolName ? TOOL_LABELS[toolName] ?? "Working on it" : LOADING_WORDS[wordIndex];
