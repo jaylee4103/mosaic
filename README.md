@@ -184,6 +184,8 @@ The images do not need to depict interiors, furniture, or fashion at all. A boar
 
 Mosaic sends the board to a multimodal model and requests a structured aesthetic representation.
 
+Each facet returns a ranked list of descriptors, not a single forced label. A board rarely reduces to exactly one color, one material, or one mood — returning the top few candidates per facet keeps real ambiguity (a room that's plausibly both "warm" and "minimal") instead of discarding it.
+
 Example:
 
 ```json
@@ -201,6 +203,14 @@ Example:
     "wood",
     "ceramic",
     "rattan"
+  ],
+  "styles": [
+    "coastal",
+    "minimalist"
+  ],
+  "shapes": [
+    "rounded",
+    "fluid"
   ],
   "qualities": [
     "warm",

@@ -10,7 +10,6 @@ class VibeResult(BaseModel):
 
     phrase: str = ""
     facets: FacetProfile = Field(default_factory=FacetProfile)
-    confidence: float = 0.0
     mixed: bool = False
     target_domain: str | None = None
     message: str | None = None

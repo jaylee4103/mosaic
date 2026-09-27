@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.models.facets import FACET_VOCABULARIES, FacetProfile
 from app.models.vibe import VibeResult
 from app.services.aggregation import AggregationService
-from app.services.color import get_color_palette_name
+from app.services.color import get_color_names
 from app.services.embedding import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -70,39 +70,28 @@ async def analyze_images(
         # Color facet via classical CV
         content = await f.read()
         await f.seek(0)
-        color_name = get_color_palette_name(content)
-        logger.info("Image %d color: %s", i, color_name)
+        color_names = get_color_names(content)
+        logger.info("Image %d color: %s", i, color_names)
 
         # Other facets via SigLIP2 (color comes from classical CV, not zero-shot)
         non_color_facets = {k: v for k, v in FACET_VOCABULARIES.items() if k != "color"}
         profile = await embedder.classify_facets(embeddings[i], non_color_facets)
-        profile.color = color_name
+        profile.color = color_names
         per_image_facets.append(profile)
 
     # 4. Set-level aggregation (majority-vote)
     aggregated = await aggregator.aggregate(per_image_facets)
     logger.info("Aggregated facets: %s", aggregated.surviving_facets())
 
-    # 5. Confidence — mean sigmoid probability (naturally small due to logit_bias)
-    per_image_probs = []
-    for profile in per_image_facets:
-        confs = [v for v in profile.confidence.values() if v > 0]
-        if confs:
-            per_image_probs.append(sum(confs) / len(confs))
-    confidence = sum(per_image_probs) / len(per_image_probs) if per_image_probs else 0.0
-    logger.info("Mean facet confidence: %.6f", confidence)
-
-    # 6. Composition
+    # 5. Composition
     phrase = aggregator.compose_phrase(aggregated)
 
-    logger.info("Final result: phrase='%s', confidence=%.6f, mixed=%s",
-                phrase, confidence, is_mixed)
+    logger.info("Final result: phrase='%s', mixed=%s", phrase, is_mixed)
 
     return AnalyzeResponse(
         vibe=VibeResult(
             phrase=phrase,
             facets=aggregated,
-            confidence=confidence,
             mixed=is_mixed,
         )
     )

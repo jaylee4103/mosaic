@@ -20,16 +20,15 @@ COLOR_NAME_PALETTE: dict[str, tuple[int, int, int]] = {
     "moss greens": (138, 154, 91),
     "jade greens": (0, 168, 107),
     # Blues
-    "ocean blues": (0, 119, 190),
-    "sky blues": (135, 206, 235),
+    "deep blues": (0, 119, 190),
+    "soft blues": (135, 206, 235),
     "navy blues": (25, 25, 112),
     "teal blues": (0, 128, 128),
-    "ice whites": (240, 248, 255),
-    "arctic whites": (220, 235, 245),
+    "cool whites": (240, 248, 255),
+    "pale blue-whites": (220, 235, 245),
     "pale blues": (173, 216, 230),
-    "midnight blues": (25, 25, 112),
     # Warm tones
-    "sunset oranges": (255, 140, 0),
+    "vivid oranges": (255, 140, 0),
     "coral pinks": (255, 127, 80),
     "golden yellows": (255, 215, 0),
     "amber": (255, 191, 0),
@@ -45,8 +44,8 @@ COLOR_NAME_PALETTE: dict[str, tuple[int, int, int]] = {
     "golden oranges": (220, 160, 60),
     "dusty roses": (190, 120, 110),
     "peach": (255, 200, 150),
-    "sunset glow": (230, 140, 80),
-    "golden hour": (240, 180, 80),
+    "warm amber": (230, 140, 80),
+    "warm gold": (240, 180, 80),
     "tangerine": (255, 160, 60),
     "apricot": (250, 180, 120),
     "deep forest greens": (20, 60, 30),
@@ -228,8 +227,12 @@ def extract_dominant_colors(image_bytes: bytes, n_colors: int = 5) -> list[Domin
     return results
 
 
-def get_color_palette_name(image_bytes: bytes) -> str:
-    """Get a single evocative color palette name for an image."""
+def get_color_names(image_bytes: bytes, top_k: int = 3) -> list[str]:
+    """Get the top-k individual dominant color names for an image, ranked by proportion.
+
+    Returned as separate names (not concatenated) so that set-level aggregation
+    can vote on shared components across images.
+    """
     colors = extract_dominant_colors(image_bytes, n_colors=3)
     seen: set[str] = set()
     unique_names: list[str] = []
@@ -238,9 +241,12 @@ def get_color_palette_name(image_bytes: bytes) -> str:
             seen.add(c.name)
             unique_names.append(c.name)
 
-    if len(unique_names) == 1:
-        return unique_names[0]
-    elif len(unique_names) >= 2:
-        return f"{unique_names[0]} with {unique_names[1]}"
-    else:
-        return "eclectic"
+    return unique_names[:top_k] if unique_names else ["eclectic"]
+
+
+def get_color_palette_name(image_bytes: bytes) -> str:
+    """Get a single evocative color palette phrase for an image (display only)."""
+    names = get_color_names(image_bytes, top_k=2)
+    if len(names) >= 2:
+        return f"{names[0]} with {names[1]}"
+    return names[0]

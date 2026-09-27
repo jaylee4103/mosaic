@@ -195,15 +195,14 @@
                 const vibe = data.vibe;
                 phrase.textContent = vibe.phrase || '(no phrase)';
                 facets.innerHTML = '';
-                const facetEntries = Object.entries(vibe.facets || {}).filter(([k, v]) => k !== 'confidence' && v);
+                const facetEntries = Object.entries(vibe.facets || {}).filter(([, v]) => v && v.length);
                 facetEntries.forEach(([k, v]) => {
                     const div = document.createElement('div');
                     div.className = 'facet';
-                    div.innerHTML = `<span class="label">${k.replace(/_/g, ' ')}</span><span class="value">${v}</span>`;
+                    div.innerHTML = `<span class="label">${k.replace(/_/g, ' ')}</span><span class="value">${v.join(', ')}</span>`;
                     facets.appendChild(div);
                 });
                 meta.innerHTML = `
-                    <span>Confidence: ${(vibe.confidence * 100).toFixed(4)}%</span>
                     <span>Mixed: ${vibe.mixed ? 'Yes' : 'No'}</span>
                 `;
                 result.classList.add('show');
