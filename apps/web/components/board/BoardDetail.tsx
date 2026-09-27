@@ -140,6 +140,18 @@ export function BoardDetail({ boardId }: { boardId: string }) {
 }
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/60 p-4 py-10 sm:p-10">
       <button onClick={onClose} aria-label="Close board" className="fixed right-6 top-6 z-50 flex h-9 w-9 items-center justify-center rounded-full bg-white text-stone-700 shadow-md">✕</button>
