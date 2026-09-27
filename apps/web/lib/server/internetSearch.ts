@@ -85,17 +85,40 @@ export async function searchInternet(
       ? validResults.map(() => category)
       : await categorizeProducts(validResults.map((item) => item.title))
 
-    const products: InternetProduct[] = validResults.map((item, i) => ({
-      title: item.title,
-      priceCents: parsePrice(item.price ?? ''),
-      merchantName: item.source || extractMerchant(item.link),
-      productUrl: item.link,
-      imageUrl: item.imageUrl ?? '',
-      category: categories[i] ?? 'general',
-      query,
-    }))
+    // Serper's /shopping link and imageUrl are both Google-hosted proxies —
+    // a google.com/search?ibp=oshop interstitial and an
+    // encrypted-tbnN.gstatic.com thumbnail, never the merchant's own page or
+    // image. Resolved here, at cache time, not lazily on click: what's
+    // stored/shown anywhere downstream (search results, cart, "view
+    // product") must never be a Google link, so it can't be deferred to
+    // whichever caller happens to touch it first. Per-item failures are
+    // dropped rather than cached with a bad link — better to have fewer
+    // correct products than a full set with broken ones.
+    const resolved = await Promise.all(
+      validResults.map(async (item, i) => {
+        try {
+          const merchantName = item.source || extractMerchant(item.link)
+          const directUrl = await resolveDirectProductUrl(`${item.title} ${merchantName}`)
+          if (!directUrl) return null
+          const imageUrl = await fetchOgImage(directUrl)
+          return {
+            title: item.title,
+            priceCents: parsePrice(item.price ?? ''),
+            merchantName,
+            productUrl: directUrl,
+            imageUrl: imageUrl ?? '',
+            category: categories[i] ?? 'general',
+            query,
+          } satisfies InternetProduct
+        } catch (err) {
+          console.warn(`[internetSearch] Could not resolve "${item.title}", skipping it:`, err)
+          return null
+        }
+      }),
+    )
+    const products = resolved.filter((product): product is InternetProduct => product !== null)
 
-    console.log(`[internetSearch] ${products.length} results for query: ${query}`)
+    console.log(`[internetSearch] ${products.length}/${validResults.length} results resolved for query: ${query}`)
     return products
   } catch (err) {
     console.error(`[internetSearch] Failed to search for "${query}":`, err)
@@ -143,6 +166,27 @@ export async function resolveDirectProductUrl(query: string): Promise<string | n
     return direct?.link ?? null
   } catch (err) {
     console.error(`[internetSearch] resolveDirectProductUrl failed for "${query}":`, err)
+    return null
+  }
+}
+
+// Fetches a real product image straight from the merchant's page (the
+// og:image meta tag almost every storefront sets for link-preview cards),
+// instead of Serper's Google-thumbnail proxy. A raw HTML fetch + regex is
+// enough — no need for a headless browser just to read one meta tag.
+async function fetchOgImage(url: string): Promise<string | null> {
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5000)
+    const response = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MosaicBot/1.0)' } })
+    clearTimeout(timeout)
+    if (!response.ok) return null
+    const html = await response.text()
+    const match = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+      ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
+    return match?.[1] ?? null
+  } catch (err) {
+    console.warn(`[internetSearch] Could not fetch og:image for ${url}:`, err)
     return null
   }
 }
