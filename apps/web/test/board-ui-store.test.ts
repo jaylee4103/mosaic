@@ -32,7 +32,7 @@ test('board UI creates a saved board, uploads images, and reads the real vibe pr
         images: [{ id: 'image-1', url: 'https://storage.example/image', note: null, createdAt: '2026-09-26T00:00:00Z' }],
         vibeProfile: analyzed ? {
           name: 'Cozy room', description: 'Warm natural textures',
-          profile: { facets: { color_palette: 'warm earth tones', material: 'wood', energy_mood: 'cozy' } },
+          profile: { facets: { color: ['amber', 'cream'], material: ['wood'], quality: ['cozy'] } },
         } : null,
       })
     }
@@ -49,7 +49,7 @@ test('board UI creates a saved board, uploads images, and reads the real vibe pr
   await analyzeBoard(board.id)
   const [refreshed] = await getBoards()
   expect(refreshed.vibe?.name).toBe('Cozy room')
-  expect(refreshed.vibe?.colors).toEqual(['warm earth tones'])
+  expect(refreshed.vibe?.colors).toEqual(['amber', 'cream'])
   expect(refreshed.vibe?.materials).toEqual(['wood'])
   expect(calls).toEqual([
     'POST /api/boards',

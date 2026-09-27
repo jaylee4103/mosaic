@@ -28,7 +28,6 @@ function isVibeResult(value: unknown): value is Record<string, unknown> {
   const result = value as Record<string, unknown>
   return typeof result.phrase === 'string' &&
     typeof result.facets === 'object' && result.facets !== null && !Array.isArray(result.facets) &&
-    typeof result.confidence === 'number' && Number.isFinite(result.confidence) &&
     typeof result.mixed === 'boolean'
 }
 
@@ -45,7 +44,6 @@ export async function analyzeBoard(
   const url = analysisUrl(mlServiceUrl)
 
   const form = new FormData()
-  form.set('mode', 'intra')
   for (const image of images) {
     const { data, error } = await db.storage.from(IMAGE_BUCKET).download(image.storagePath)
     if (error || !data) throw new Error('Could not read a board image for analysis')

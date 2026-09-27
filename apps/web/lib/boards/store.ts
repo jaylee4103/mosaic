@@ -35,9 +35,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-function stringFacet(facets: Record<string, unknown>, key: string): string[] {
+function facetTags(facets: Record<string, unknown>, key: string): string[] {
   const value = facets[key];
-  return typeof value === "string" && value.length > 0 ? [value.replaceAll("_", " ")] : [];
+  const tags = Array.isArray(value) ? value : [value];
+  return tags.filter((tag): tag is string => typeof tag === "string" && tag.length > 0)
+    .map((tag) => tag.replaceAll("_", " "));
 }
 
 function mapVibe(vibe: ApiVibe | null): VibeProfile | null {
@@ -46,10 +48,10 @@ function mapVibe(vibe: ApiVibe | null): VibeProfile | null {
   return {
     name: vibe.name,
     description: vibe.description,
-    colors: [...stringFacet(facets, "color_palette"), ...stringFacet(facets, "color_tone")],
-    materials: stringFacet(facets, "material"),
-    qualities: ["style_archetype", "era_mood", "texture_quality", "energy_mood"]
-      .flatMap((key) => stringFacet(facets, key)),
+    colors: ["color", "color_palette", "color_tone"].flatMap((key) => facetTags(facets, key)),
+    materials: facetTags(facets, "material"),
+    qualities: ["style", "quality", "terrain", "locale", "shape", "style_archetype", "era_mood", "texture_quality", "energy_mood"]
+      .flatMap((key) => facetTags(facets, key)),
   };
 }
 

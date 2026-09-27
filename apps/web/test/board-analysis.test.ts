@@ -7,8 +7,7 @@ const GUEST_ID = 'guest-1'
 const BOARD_ID = 'board-1'
 const VIBE = {
   phrase: 'Sun-Washed Mediterranean',
-  facets: { color_palette: 'warm earth tones' },
-  confidence: 0.83,
+  facets: { color: ['amber', 'cream'], material: ['wood'] },
   mixed: false,
   target_domain: null,
   message: null,
@@ -27,7 +26,7 @@ test('analysis sends stored private images to ML and saves its vibe result', asy
     expect(String(url)).toBe('http://ml.local/api/vibe/analyze')
     expect(options?.method).toBe('POST')
     const form = options?.body as FormData
-    expect(form.get('mode')).toBe('intra')
+    expect(form.get('mode')).toBeNull()
     const image = form.get('files') as File
     expect(image.type).toBe('image/png')
     expect([...new Uint8Array(await image.arrayBuffer())]).toEqual([1, 2, 3])
