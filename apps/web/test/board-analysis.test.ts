@@ -40,6 +40,23 @@ test('analysis sends stored private images to ML and saves its vibe result', asy
   expect(tables.vibe_profiles).toHaveLength(1)
 })
 
+test('analysis forwards the configured service token only in the request header', async () => {
+  const previousToken = process.env.ML_SERVICE_TOKEN
+  process.env.ML_SERVICE_TOKEN = 'test-service-token'
+  try {
+    const { client } = ownedBoard()
+    await addImage(GUEST_ID, BOARD_ID, { mimeType: 'image/png', bytes: new Uint8Array([1]) }, client)
+    const fetcher = async (_url: string, options: RequestInit) => {
+      expect(new Headers(options.headers).get('Authorization')).toBe('Bearer test-service-token')
+      return Response.json({ vibe: VIBE })
+    }
+    await analyzeBoard(GUEST_ID, BOARD_ID, client, fetcher, 'http://ml.local')
+  } finally {
+    if (previousToken === undefined) delete process.env.ML_SERVICE_TOKEN
+    else process.env.ML_SERVICE_TOKEN = previousToken
+  }
+})
+
 test('analysis rejects missing images and other guests before calling ML', async () => {
   const { client } = ownedBoard()
   const unused = async () => { throw new Error('ML must not be called') }
