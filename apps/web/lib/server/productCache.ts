@@ -6,6 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from './supabase'
 import type { InternetProduct } from './internetSearch'
+import type { Product } from './products'
 
 function hashString(str: string): string {
   let hash = 0
@@ -88,7 +89,7 @@ export async function getCachedProducts(
 ): Promise<Product[]> {
   let request = db
     .from('products')
-    .select('id, merchant_id, name, description, category, price_cents, currency, image_url, product_url, available, metadata')
+    .select('id, merchant_id, name, description, category, price_cents, currency, image_url, product_url, available, metadata, source')
     .eq('available', true)
 
   if (category) {
@@ -98,7 +99,7 @@ export async function getCachedProducts(
     request = request.lte('price_cents', maxPriceCents)
   }
 
-  const { data, error } = await request.order('metadata', { ascending: false })
+  const { data, error } = await request
   if (error) {
     console.error('[productCache] Error fetching cached products:', error.message)
     return []

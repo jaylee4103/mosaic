@@ -4,13 +4,12 @@
  */
 const SERPER_API_KEY = process.env.SERPER_API_KEY
 
-interface SerperShoppingResult {
+interface SerperProduct {
   title: string
   price: string
   source: string
   link: string
   image: string
-  category?: string
 }
 
 interface InternetProduct {
@@ -33,29 +32,30 @@ export async function searchInternet(
     return []
   }
 
-  const params = new URLSearchParams({
-    q: query,
-    tbm: 'shop',
-    num: '10',
-    hl: 'en',
-    gl: 'us',
-  })
-
-  if (maxPriceCents) {
-    params.set('price', `${Math.floor(maxPriceCents / 100)}_-${''}`)
-  }
-
-  const url = `https://www.google.com/search?${params}`
-
   try {
-    const response = await fetch(
-      `https://www.googleapis.com/customsearch/v1?key=${SERPER_API_KEY}&cx=009560859551853930049:fsvmnj2qgxm&q=${encodeURIComponent(query)}&searchType=products`,
-      {
-        method: 'GET',
-        headers: { 'X-API-Key': SERPER_API_KEY },
-        next: { revalidate: 900 }, // cache 15 minutes at edge
+    const params = new URLSearchParams({
+      q: query,
+      tbm: 'shop',
+      num: '10',
+      hl: 'en',
+      gl: 'us',
+    })
+    if (maxPriceCents) {
+      const min = Math.floor(maxPriceCents / 100)
+      const max = Math.ceil(maxPriceCents / 100)
+      params.set('price', `${min}-${max}`)
+    }
+
+    const url = `https://search.serper.dev/search?${params}`
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-API-Key': SERPER_API_KEY,
+        'Content-Type': 'application/json',
       },
-    )
+      next: { revalidate: 900 },
+    })
 
     if (!response.ok) {
       console.error(`[internetSearch] Serper API error: ${response.status}`)
@@ -63,21 +63,14 @@ export async function searchInternet(
     }
 
     const data = await response.json()
-    const items = data.items as Array<{
-      title: string
-      price?: string
-      source?: string
-      link?: string
-      image?: string
-      merchant?: string
-    }>
+    const shoppingResults = data.shopping as SerperProduct[]
 
-    if (!items || items.length === 0) {
+    if (!shoppingResults || shoppingResults.length === 0) {
       console.log(`[internetSearch] No results for query: ${query}`)
       return []
     }
 
-    const products: InternetProduct[] = items
+    const products: InternetProduct[] = shoppingResults
       .filter((item) => item.title && item.source)
       .map((item) => ({
         title: item.title,
