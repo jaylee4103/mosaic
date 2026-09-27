@@ -6,8 +6,10 @@ import { searchProducts } from '@/lib/server/products'
 import { dropAlternates, popNextAlternate, storeAlternates } from '@/lib/server/agent-alternates'
 import { getSupabaseAdmin } from '@/lib/server/supabase'
 import { performSearch } from '@/lib/server/searchOrchestrator'
+import type { VibeProfile } from '@/lib/server/vibe-profile'
 import { browseWebpage, getPageSummary } from '@/lib/server/browser'
 import { runMerchantCheckout } from '@/lib/server/browserCheckout'
+import { isGoogleInterstitialUrl, resolveDirectProductUrl } from '@/lib/server/internetSearch'
 
 // Cap on how many search results we treat as "close enough to the vibe to
 // keep as fallback candidates" — the top pick gets added, the rest are
@@ -15,6 +17,18 @@ import { runMerchantCheckout } from '@/lib/server/browserCheckout'
 // re-searching. Not a hard product-ranking decision (products.ts owns
 // ranking) — just how many of its results this layer holds onto.
 const CANDIDATE_POOL_SIZE = 4
+
+// Cached productUrl is frequently a Google Shopping interstitial, not the
+// merchant's real page (see internetSearch.ts) — browsing it as a headless
+// bot gets a CAPTCHA, not the product page it looks like from the outside.
+// Only `url` is known here (no merchant name), so this best-effort resolves
+// using the interstitial's own `q=` search-query param.
+async function resolveBrowseTarget(url: string): Promise<string> {
+  if (!isGoogleInterstitialUrl(url)) return url
+  const query = new URL(url).searchParams.get('q')
+  if (!query) return url
+  return (await resolveDirectProductUrl(query)) ?? url
+}
 
 // One tool set implementation of the generic AgentTurnInput['tools'] shape
 // the harness expects (see harness.ts) — swappable for a different tool set
@@ -87,7 +101,8 @@ export function createShoppingTools(
               const vibeProfile = await db.from('vibe_profiles').select('profile_json').eq('board_id', boardId).maybeSingle()
               if ((vibeProfile as { data: { profile_json: Record<string, unknown> } } | null)?.data) {
                 const vp = (vibeProfile as { data: { profile_json: Record<string, unknown> } }).data.profile_json
-                await performSearch({ profile: vp, name: '', description: null, updatedAt: '' } as any, query ?? '', guestId, db)
+                const fakeVibeProfile: VibeProfile = { profile: vp, name: '', description: null, updatedAt: '' }
+                await performSearch(fakeVibeProfile, query ?? '', guestId, db)
               }
             } catch (err) {
               console.error('[shopping-tools] Internet search failed:', err)
@@ -117,7 +132,7 @@ export function createShoppingTools(
       description: `Navigate to a product URL and return the page content as text. Use this to view the full product page, check reviews, verify availability, or read details not in the search snippet. Returns the page title and text content.`,
       inputSchema: z.object({ url: z.string().url().describe('The URL to navigate to (from search_products productUrl)') }),
       execute: logged('browse_webpage', async ({ url }) => {
-        return await browseWebpage(url)
+        return await browseWebpage(await resolveBrowseTarget(url))
       }),
     }),
 
@@ -125,7 +140,7 @@ export function createShoppingTools(
       description: `Get a quick summary of a product page — title, key text excerpt, and any visible price. Faster than browse_webpage when you just need a quick overview.`,
       inputSchema: z.object({ url: z.string().url().describe('The URL to summarize (from search_products productUrl)') }),
       execute: logged('browse_summary', async ({ url }) => {
-        return await getPageSummary(url)
+        return await getPageSummary(await resolveBrowseTarget(url))
       }),
     }),
 

@@ -24,6 +24,18 @@ const LOADING_WORDS = [
   "Vibing", "Sensing", "Scouting", "Curating", "Rummaging", "Cross-checking",
   "Noodling", "Percolating", "Sniffing around", "Eyeballing options", "Daydreaming",
   "Window shopping", "Mood-boarding", "Pondering", "Taste-testing", "Digging in",
+  "Locking in", "Manifesting", "Vibe-checking", "Glowing up the cart", "Serving looks",
+  "Main character energy", "It's giving searching", "Understood the assignment", "Aura farming",
+  "Girl-mathing the budget", "Rizzing up options", "No cap, searching", "Cooking something up",
+  "Simmering", "Marinating on it", "Brewing", "Untangling threads", "Connecting dots",
+  "Piecing it together", "Sketching options", "Shuffling the deck", "Flipping through racks",
+  "Thrifting the internet", "Combing the aisles", "Peeking behind the curtain", "Reading the room",
+  "Checking vibes", "Tuning in", "Dialing it in", "Fine-tuning", "Zeroing in", "Homing in",
+  "Triangulating", "Calibrating", "Syncing up", "Mapping it out", "Charting a course", "Plotting",
+  "Scheming (the good kind)", "Conjuring options", "Summoning picks", "Assembling the lineup",
+  "Auditioning options", "Casting the net", "Trawling for finds", "Prospecting", "Panning for gold",
+  "Treasure hunting", "Sleuthing", "Snooping around", "Nosing about", "On the case",
+  "Hot on the trail", "Chasing the drip", "Securing the bag", "Bet, searching",
 ];
 const TOOL_LABELS: Record<string, string> = {
   search_products: "Searching the catalog",

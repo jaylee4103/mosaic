@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { assertBoardOwnership } from './board-ownership'
 import { notFoundError, validationError } from './errors'
+import { isGoogleInterstitialUrl, resolveDirectProductUrl } from './internetSearch'
 import { getProductsByIds } from './products'
 import { getSupabaseAdmin } from './supabase'
 
@@ -170,7 +171,19 @@ export async function runMerchantCheckout(
     )
   }
 
-  const result = await callBrowserService(product.productUrl, merchant, fetcher)
+  // Cached productUrl is frequently a Google Shopping interstitial, not the
+  // merchant's real page (see internetSearch.ts) — heading a headless
+  // browser straight at Google gets a CAPTCHA every time, not a checkout
+  // flow. Resolve to the actual retailer page first; fail cleanly rather
+  // than screenshotting a CAPTCHA page as if it were checkout progress.
+  let productUrl = product.productUrl
+  if (isGoogleInterstitialUrl(productUrl)) {
+    const resolved = await resolveDirectProductUrl(`${product.name} ${product.merchantName}`)
+    if (!resolved) throw validationError(`Could not find ${product.merchantName}'s direct product page for checkout`)
+    productUrl = resolved
+  }
+
+  const result = await callBrowserService(productUrl, merchant, fetcher)
   const screenshotPath = await uploadScreenshot(boardId, productId, result.screenshotBase64, db)
 
   const { data, error } = await db
