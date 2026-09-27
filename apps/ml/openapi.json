@@ -1,0 +1,398 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Mosaic Vibe Detection",
+    "description": "AI-powered vibe extraction from image sets",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/vibe/analyze": {
+      "post": {
+        "tags": [
+          "vibe"
+        ],
+        "summary": "Analyze Images",
+        "description": "Analyze a set of uploaded images and return a vibe description.\n\nColor facet uses classical CV (k-means + perceptual color names).\nOther facets use SigLIP2 sigmoid scoring, each gated against a\nper-facet null anchor so a facet with no real match in the image\ndrops instead of forcing a guess. No mode selector \u2014 always\ndomain-agnostic.",
+        "operationId": "analyze_images_api_vibe_analyze_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analyze_images_api_vibe_analyze_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vibe/analyze-urls": {
+      "post": {
+        "tags": [
+          "vibe"
+        ],
+        "summary": "Analyze Image Urls",
+        "description": "Analyze a set of images by URL \u2014 for service-to-service calls where\nimages are already hosted (e.g. Supabase Storage) and shouldn't be\nre-uploaded as raw bytes. Same pipeline and response shape as /analyze.",
+        "operationId": "analyze_image_urls_api_vibe_analyze_urls_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzeUrlsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vibe/facets": {
+      "get": {
+        "tags": [
+          "vibe"
+        ],
+        "summary": "List Facet Vocabularies",
+        "description": "Return the zero-shot tag vocabulary for each facet.\n\nLets a calling service validate or display facet tags (e.g. building\nfilter chips) without hardcoding this service's internal vocab. The\n\"color\" facet is omitted here since it's populated from classical CV,\nnot a fixed tag list.",
+        "operationId": "list_facet_vocabularies_api_vibe_facets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacetVocabulariesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Serve Frontend",
+        "operationId": "serve_frontend__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "summary": "List Models",
+        "description": "Return available models (OpenRouter-compatible endpoint).",
+        "operationId": "list_models_v1_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response List Models V1 Models Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalyzeResponse": {
+        "properties": {
+          "vibe": {
+            "$ref": "#/components/schemas/VibeResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vibe"
+        ],
+        "title": "AnalyzeResponse"
+      },
+      "AnalyzeUrlsRequest": {
+        "properties": {
+          "image_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Image Urls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_urls"
+        ],
+        "title": "AnalyzeUrlsRequest",
+        "description": "Request body for analyzing images already hosted elsewhere.\n\nMeant for service-to-service calls (e.g. the Next.js backend passing\nSupabase Storage URLs) that shouldn't have to re-upload raw image bytes."
+      },
+      "Body_analyze_images_api_vibe_analyze_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_analyze_images_api_vibe_analyze_post"
+      },
+      "FacetProfile": {
+        "properties": {
+          "style": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Style"
+          },
+          "terrain": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Terrain"
+          },
+          "locale": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Locale"
+          },
+          "material": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Material"
+          },
+          "color": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Color"
+          },
+          "quality": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Quality"
+          },
+          "shape": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Shape"
+          }
+        },
+        "type": "object",
+        "title": "FacetProfile",
+        "description": "Structured facet values for a set of images.\n\nEach facet holds a ranked top-k list of tags rather than a single winner,\nso a forced single choice doesn't drown out real ambiguity in the image\n(e.g. a scene that's plausibly both \"moody\" and \"serene\")."
+      },
+      "FacetVocabulariesResponse": {
+        "properties": {
+          "facets": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Facets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "facets"
+        ],
+        "title": "FacetVocabulariesResponse",
+        "description": "The zero-shot vocabulary for each classified facet, plus the\nCV-derived \"color\" facet which has no fixed vocabulary."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VibeResult": {
+        "properties": {
+          "phrase": {
+            "type": "string",
+            "title": "Phrase",
+            "default": ""
+          },
+          "facets": {
+            "$ref": "#/components/schemas/FacetProfile"
+          },
+          "mixed": {
+            "type": "boolean",
+            "title": "Mixed",
+            "default": false
+          },
+          "target_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Domain"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "title": "VibeResult",
+        "description": "The composed output of the vibe detection pipeline."
+      }
+    }
+  }
+}

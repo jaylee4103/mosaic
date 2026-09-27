@@ -41,23 +41,6 @@ static_dir = Path(__file__).parent.parent / "static"
 async def serve_frontend() -> FileResponse:
     return FileResponse(static_dir / "index.html")
 
-# Serve the test frontend
-static_dir = Path(__file__).parent.parent / "static"
-
-
-@app.get("/")
-async def serve_frontend() -> FileResponse:
-    return FileResponse(static_dir / "index.html")
-
-# Serve the test frontend
-static_dir = Path(__file__).parent.parent / "static"
-
-
-@app.get("/")
-async def serve_frontend() -> FileResponse:
-    return FileResponse(static_dir / "index.html")
-
-
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
