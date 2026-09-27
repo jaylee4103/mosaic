@@ -60,3 +60,6 @@ models/
 
 # apps/browser
 apps/browser/node_modules/
+
+# scripts/dev.sh service logs
+.dev-logs/
