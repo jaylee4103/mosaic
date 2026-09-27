@@ -78,16 +78,6 @@ export async function searchProducts(
   filters: ProductSearchFilters,
   db: SupabaseClient = getSupabaseAdmin(),
 ): Promise<Product[]> {
-  let request = db.from('products').select(PRODUCT_COLUMNS).eq('available', true).order('name', { ascending: true })
-
-  if (typeof filters.maxPriceCents === 'number') request = request.lte('price_cents', filters.maxPriceCents)
-  const { data, error } = await request
-  if (error) throw new Error('Could not search products')
-  // The seeded catalog is small. Match generated multi-word searches against
-  // names, descriptions, and categories so a phrase such as "warm ceramic
-  // lamp" can retrieve candidates for AI ranking. A larger provider should
-  // replace this with indexed search while preserving the response contract.
-  //
   // `category` is folded into the token match instead of an exact `WHERE`
   // filter: it's an inferred guess on both sides (the agent's freeform
   // guess, and internetSearch.ts's keyword-based inference for cached
@@ -100,12 +90,32 @@ export async function searchProducts(
       `${filters.query ?? ''} ${filters.category ?? ''}`.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [],
     ),
   ]
+
+  let request = db.from('products').select(PRODUCT_COLUMNS).eq('available', true).order('name', { ascending: true })
+  if (typeof filters.maxPriceCents === 'number') request = request.lte('price_cents', filters.maxPriceCents)
+  // Push the token match into SQL (against the trigram-indexed
+  // name/description/category columns — see products_search_trgm_idx)
+  // instead of pulling the whole available-products table and re-scanning
+  // it in JS on every call.
+  if (tokens.length > 0) {
+    const orClause = tokens
+      .flatMap((token) => ['name', 'description', 'category'].map((column) => `${column}.ilike.%${token}%`))
+      .join(',')
+    request = request.or(orClause)
+  }
+
+  const { data, error } = await request
+  if (error) throw new Error('Could not search products')
+
+  // SQL already narrowed the candidate set to rows matching at least one
+  // token; rank the (much smaller) result set by token coverage so the
+  // best-matching rows come first.
   const candidates = ((data ?? []) as ProductRow[]).map((row) => {
     const searchable = `${row.name} ${row.description ?? ''} ${row.category ?? ''}`.toLowerCase()
     return { row, score: tokens.filter((token) => searchable.includes(token)).length }
   })
   const bestScore = Math.max(0, ...candidates.map((candidate) => candidate.score))
-  const rows = candidates.filter((candidate) => tokens.length === 0 || (candidate.score > 0 && candidate.score === bestScore))
+  const rows = candidates.filter((candidate) => tokens.length === 0 || candidate.score === bestScore)
     .map((candidate) => candidate.row)
   return attachMerchantNames(rows, db)
 }

@@ -4,8 +4,6 @@ import { getVibeProfile } from '@/lib/server/vibe-profile'
 import { runAgentTurn, runAgentTurnStream } from './harness'
 import { resolveAgentModel, type AgentModelConfig } from './providers'
 import { createShoppingTools } from './tools/shoppingTools'
-import { performSearch } from '@/lib/server/searchOrchestrator'
-import { getSupabaseAdmin } from '@/lib/server/supabase'
 
 // The concrete shopping agent: harness.ts's generic loop + the shopping tool set + this system prompt.
 const SYSTEM_PROMPT = `You are Mosaic's shopping agent. You help the user build a cart of products that match their board's aesthetic (its "vibe profile") and their budget.
@@ -43,22 +41,16 @@ async function prepareShoppingTurn(input: ShoppingAgentTurnInput): Promise<{
   messages: ModelMessage[]
 }> {
   const { guestId, boardId, userMessage, conversationHistory = [], model } = input
-  const db = getSupabaseAdmin()
 
   const [vibeProfile, cart] = await Promise.all([
     getVibeProfile(guestId, boardId).catch(() => null),
     getCart(guestId, boardId),
   ])
 
-  // Proactively populate the internet-search cache before the agent tool loop begins.
-  if (vibeProfile) {
-    try {
-      await performSearch(vibeProfile, userMessage, guestId, db)
-    } catch (err) {
-      console.error('[shopping-agent] Internet search failed, continuing with cached/local results:', err)
-    }
-  }
-
+  // Search cache is populated lazily by search_products on a cache miss
+  // (shoppingTools.ts) instead of eagerly here — an eager call ran this
+  // (LLM query-gen + possible internet search) on every turn, including
+  // replace/swap_item turns that never touch search at all.
   const vibePhrase = (vibeProfile?.profile as { phrase?: unknown } | undefined)?.phrase ?? null
   console.log(
     `[shopping-agent] context loaded: vibePhrase=${JSON.stringify(vibePhrase)} cartItems=${cart.items.length} budgetCents=${cart.budgetCents}`,
