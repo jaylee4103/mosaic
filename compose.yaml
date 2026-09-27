@@ -1,0 +1,32 @@
+services:
+  ml:
+    build: ./apps/ml
+    environment:
+      HF_HOME: /models/huggingface
+    volumes:
+      - ml-models:/models/huggingface
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  web:
+    build: ./apps/web
+    env_file: ./apps/web/.env.local
+    environment:
+      ML_SERVICE_URL: http://ml:8000
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      ml:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  ml-models:
