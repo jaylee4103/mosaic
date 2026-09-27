@@ -21,6 +21,7 @@ export async function POST(request: Request, { params }: Context) {
     const result = await runShoppingAgentTurn({ guestId: guest.id, boardId, userMessage })
     return json(result, 200, guest)
   } catch (error) {
+    console.error(`[chat-route] request failed: ${error instanceof Error ? error.stack : String(error)}`)
     return routeError(error, guest)
   }
 }

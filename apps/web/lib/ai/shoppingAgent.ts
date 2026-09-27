@@ -36,11 +36,16 @@ export type ShoppingAgentTurnResult = {
 
 export async function runShoppingAgentTurn(input: ShoppingAgentTurnInput): Promise<ShoppingAgentTurnResult> {
   const { guestId, boardId, userMessage, conversationHistory = [], model } = input
+  console.log(`[shopping-agent] turn start: boardId=${boardId} message=${JSON.stringify(userMessage)}`)
 
   const [vibeProfile, cart] = await Promise.all([
     getVibeProfile(guestId, boardId).catch(() => null),
     getCart(guestId, boardId),
   ])
+  const vibePhrase = (vibeProfile?.profile as { phrase?: unknown } | undefined)?.phrase ?? null
+  console.log(
+    `[shopping-agent] context loaded: vibePhrase=${JSON.stringify(vibePhrase)} cartItems=${cart.items.length} budgetCents=${cart.budgetCents}`,
+  )
 
   const contextMessage: ModelMessage = {
     role: 'user',
@@ -65,5 +70,8 @@ export async function runShoppingAgentTurn(input: ShoppingAgentTurnInput): Promi
   })
 
   const updatedCart = await getCart(guestId, boardId)
+  console.log(
+    `[shopping-agent] turn done: steps=${result.steps} finalCartItems=${updatedCart.items.length} reply=${JSON.stringify(result.assistantMessage)}`,
+  )
   return { assistantMessage: result.assistantMessage, cart: updatedCart, steps: result.steps }
 }

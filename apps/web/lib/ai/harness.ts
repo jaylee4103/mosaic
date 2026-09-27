@@ -23,6 +23,11 @@ export type AgentTurnResult = {
 const DEFAULT_MAX_STEPS = 8
 
 export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResult> {
+  const toolNames = Object.keys(input.tools)
+  console.log(
+    `[harness] starting turn: model=${modelLabel(input.model)} tools=[${toolNames.join(', ')}] messages=${input.messages.length}`,
+  )
+
   const result = await generateText({
     model: input.model,
     system: input.system,
@@ -31,8 +36,20 @@ export async function runAgentTurn(input: AgentTurnInput): Promise<AgentTurnResu
     stopWhen: stepCountIs(input.maxSteps ?? DEFAULT_MAX_STEPS),
   })
 
+  for (const [i, step] of result.steps.entries()) {
+    const calls = step.toolCalls.map((c) => `${c.toolName}(${JSON.stringify(c.input)})`)
+    const results = step.toolResults.map((r) => JSON.stringify(r.output))
+    if (calls.length > 0) console.log(`[harness] step ${i + 1}: calls=[${calls.join(', ')}] results=[${results.join(', ')}]`)
+    else console.log(`[harness] step ${i + 1}: text response, no tool calls`)
+  }
+  console.log(`[harness] finished turn: ${result.steps.length} step(s), finishReason=${result.finishReason}`)
+
   return {
     assistantMessage: result.text,
     steps: result.steps.length,
   }
+}
+
+function modelLabel(model: LanguageModel): string {
+  return typeof model === 'string' ? model : `${model.provider}/${model.modelId}`
 }

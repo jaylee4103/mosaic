@@ -31,8 +31,21 @@ export function createShoppingTools(
   db: SupabaseClient = getSupabaseAdmin(),
 ): ToolSet {
   async function runAction(action: CartAction) {
+    console.log(`[shopping-tools] cart action: ${JSON.stringify(action)}`)
     const outcome = await applyCartActions(guestId, boardId, { actions: [action] }, db)
+    console.log(`[shopping-tools] cart action result: ${JSON.stringify(outcome.results[0])}`)
     return outcome.results[0]
+  }
+
+  // Wraps a tool's execute so every call is logged the same way, without
+  // repeating console.log at every call site below.
+  function logged<TArgs, TResult>(name: string, execute: (args: TArgs) => Promise<TResult>) {
+    return async (args: TArgs): Promise<TResult> => {
+      console.log(`[shopping-tools] ${name} called with: ${JSON.stringify(args)}`)
+      const result = await execute(args)
+      console.log(`[shopping-tools] ${name} returned: ${JSON.stringify(result)}`)
+      return result
+    }
   }
 
   // Correlates a search_products call with the add_item call that (usually)
@@ -50,8 +63,8 @@ export function createShoppingTools(
         category: z.string().optional(),
         maxPriceCents: z.number().int().positive().optional(),
       }),
-      execute: async ({ query, category, maxPriceCents }) => {
-        const products = (await searchProducts({ query, category, maxPriceCents })).slice(0, CANDIDATE_POOL_SIZE)
+      execute: logged('search_products', async ({ query, category, maxPriceCents }) => {
+        const products = (await searchProducts({ query, category, maxPriceCents }, db)).slice(0, CANDIDATE_POOL_SIZE)
         lastSearchCandidateIds = products.map((p) => p.id)
         return products.map((p) => ({
           productId: p.id,
@@ -61,30 +74,31 @@ export function createShoppingTools(
           category: p.category,
           description: p.description,
         }))
-      },
+      }),
     }),
 
     add_item: tool({
       description: 'Add a product to the cart by productId.',
       inputSchema: z.object({ productId: z.string(), quantity: z.number().int().positive().optional() }),
-      execute: async ({ productId, quantity }) => {
+      execute: logged('add_item', async ({ productId, quantity }) => {
         const result = await runAction({ type: 'ADD', productId, quantity })
         if (result.ok) {
           const alternates = lastSearchCandidateIds.filter((id) => id !== productId)
           await storeAlternates(boardId, productId, alternates, db)
+          console.log(`[shopping-tools] stashed ${alternates.length} alternate(s) for ${productId}`)
         }
         return result
-      },
+      }),
     }),
 
     remove_item: tool({
       description: 'Remove a product from the cart by productId. Fails if the item is locked.',
       inputSchema: z.object({ productId: z.string() }),
-      execute: async ({ productId }) => {
+      execute: logged('remove_item', async ({ productId }) => {
         const result = await runAction({ type: 'REMOVE', productId })
         if (result.ok) await dropAlternates(boardId, productId, db)
         return result
-      },
+      }),
     }),
 
     replace_item: tool({
@@ -94,19 +108,20 @@ export function createShoppingTools(
         addProductId: z.string(),
         quantity: z.number().int().positive().optional(),
       }),
-      execute: async ({ removeProductId, addProductId, quantity }) => {
+      execute: logged('replace_item', async ({ removeProductId, addProductId, quantity }) => {
         const result = await runAction({ type: 'REPLACE', removeProductId, addProductId, quantity })
         if (result.ok) await dropAlternates(boardId, removeProductId, db)
         return result
-      },
+      }),
     }),
 
     swap_item: tool({
       description: 'Swap a product already in the cart for the next-best alternative from its original search, without re-searching. Use this when the user says something like "swap this out" / "show me something else" for an item already in the cart. If there are no queued alternatives left, fall back to search_products + replace_item instead.',
       inputSchema: z.object({ productId: z.string().describe('The product currently in the cart to swap out') }),
-      execute: async ({ productId }) => {
+      execute: logged('swap_item', async ({ productId }) => {
         const next = await popNextAlternate(boardId, productId, db)
         if (!next) {
+          console.log(`[shopping-tools] no queued alternates for ${productId}`)
           return { ok: false, error: 'No queued alternatives for this item — search for a replacement instead.', code: 'NO_ALTERNATES' }
         }
         const result = await runAction({ type: 'REPLACE', removeProductId: productId, addProductId: next.nextProductId })
@@ -114,25 +129,25 @@ export function createShoppingTools(
           await storeAlternates(boardId, next.nextProductId, next.remaining, db)
         }
         return { ...result, swappedToProductId: next.nextProductId }
-      },
+      }),
     }),
 
     lock_item: tool({
       description: 'Lock a product in the cart so future edits leave it untouched, e.g. "keep the lamp".',
       inputSchema: z.object({ productId: z.string() }),
-      execute: ({ productId }) => runAction({ type: 'LOCK', productId }),
+      execute: logged('lock_item', ({ productId }) => runAction({ type: 'LOCK', productId })),
     }),
 
     unlock_item: tool({
       description: 'Unlock a previously locked product.',
       inputSchema: z.object({ productId: z.string() }),
-      execute: ({ productId }) => runAction({ type: 'UNLOCK', productId }),
+      execute: logged('unlock_item', ({ productId }) => runAction({ type: 'UNLOCK', productId })),
     }),
 
     set_budget: tool({
       description: 'Set or clear the cart budget in cents. Pass null to clear it.',
       inputSchema: z.object({ budgetCents: z.number().int().positive().nullable() }),
-      execute: ({ budgetCents }) => runAction({ type: 'SET_BUDGET', budgetCents }),
+      execute: logged('set_budget', ({ budgetCents }) => runAction({ type: 'SET_BUDGET', budgetCents })),
     }),
   }
 }
