@@ -57,3 +57,6 @@ venv/
 *.onnx
 *.safetensors
 models/
+
+# apps/browser
+apps/browser/node_modules/
