@@ -1,5 +1,5 @@
 -- Persist the two-store demo between Next.js route handler invocations.
-create table public.demo_checkout_sessions (
+create table if not exists public.demo_checkout_sessions (
   guest_session_id uuid primary key references public.guest_sessions(id) on delete cascade,
   state jsonb not null check (jsonb_typeof(state) = 'object'),
   version bigint not null default 0 check (version >= 0),

@@ -5,7 +5,7 @@
 -- payment-submission page. This table records one attempt per (board,
 -- product); a later attempt for the same pair replaces the earlier row
 -- rather than accumulating a history, since only the latest proof matters.
-create table public.checkout_proofs (
+create table if not exists public.checkout_proofs (
   id uuid primary key default gen_random_uuid(),
   board_id uuid not null references public.boards(id) on delete cascade,
   guest_session_id text not null,
@@ -27,4 +27,4 @@ alter table public.checkout_proofs enable row level security;
 -- heuristics in apps/browser/src/selectors.ts, so a site the generic
 -- patterns fail on can be fixed with a data change instead of a deploy.
 -- Shape: { "addToCart": string[], "checkout": string[] }
-alter table public.merchants add column checkout_selectors jsonb;
+alter table public.merchants add column if not exists checkout_selectors jsonb;
