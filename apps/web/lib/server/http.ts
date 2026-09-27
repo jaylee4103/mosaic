@@ -19,5 +19,16 @@ export function routeError(error: unknown, guest?: GuestSession): Response {
             code === 'ML_UNAVAILABLE' || code === 'AGENT_UNAVAILABLE' ? 503 : 502
   const message = status === 502 ? 'Backend request failed' :
     error instanceof Error ? error.message : 'Request failed'
+
+  // The client only ever sees `message` above (masked to a generic string
+  // for unrecognized/5xx errors) — log the real error here so a bare
+  // "Backend request failed" in the response doesn't leave the actual cause
+  // (stack trace, cause chain, non-Error throws) undiscoverable server-side.
+  const logLevel = status >= 500 ? 'error' : 'warn'
+  console[logLevel](
+    `[route-error] status=${status} code=${code ?? 'none'}`,
+    error instanceof Error ? error.stack ?? error.message : error,
+  )
+
   return json({ error: message, code: status === 502 ? 'INTERNAL_ERROR' : code }, status, guest)
 }

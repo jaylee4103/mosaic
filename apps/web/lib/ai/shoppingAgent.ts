@@ -23,6 +23,7 @@ Rules:
 - Respect the budget if one is set. If you can't find something that fits, say so rather than adding something over budget.
 - If nothing in the catalog is a good match, say so rather than adding a weak match just to have added something.
 - Use browse_webpage to navigate to product pages (from search_products results) when you need to check details, reviews, availability, or descriptions that aren't in the search snippet. Use browse_summary for a quicker overview with just the title and price.
+- Before calling run_merchant_checkout, confirm the product's URL is a single item's page, not a category/listing/search-results page (a page listing many products, no single price). If browse_summary or browse_webpage shows it's a listing page, use browse_webpage to find a specific product link within it and treat that as the real product page instead.
 - Keep your final reply short and concrete: what changed and why.`
 
 export type ShoppingAgentTurnInput = {

@@ -78,6 +78,13 @@ function groupCartForCheckout(cart: Cart): CheckoutGroup[] {
   for (const item of cart.items) {
     if (!item.product) throw validationError('A cart item references a product that no longer exists')
     if (!item.product.available) throw validationError(`${item.product.name} is no longer available`)
+    // 'browser' merchants have no Stripe integration (no key in
+    // STRIPE_KEYS_BY_MERCHANT_SLUG below) — they go through the separate
+    // browser-driven checkout-proof flow instead (browserCheckout.ts). A
+    // cart mixing both kinds of merchant must not fold the browser one into
+    // this grouping, or preparePayments would later try (and fail) to open
+    // a Stripe account for it.
+    if (item.product.checkoutMethod === 'browser') continue
     const key = item.product.merchantId
     const group = groups.get(key) ?? { merchantId: key, merchantName: item.product.merchantName, items: [], amountCents: 0 }
     group.items.push({
