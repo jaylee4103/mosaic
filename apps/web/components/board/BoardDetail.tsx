@@ -81,7 +81,7 @@ export function BoardDetail({ boardId }: { boardId: string }) {
       >
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {board.images.map((img) => (
-            <div key={img.id} className="aspect-square overflow-hidden rounded-md border border-white bg-stone-200 shadow-sm">
+            <div key={img.id} className={`aspect-square overflow-hidden rounded-md border border-white bg-stone-200 shadow-sm ${analysisState === "running" ? "animate-pulse" : ""}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={img.image_url} alt="Inspiration" className="h-full w-full object-cover" />
             </div>
@@ -100,12 +100,13 @@ export function BoardDetail({ boardId }: { boardId: string }) {
               ))}
             </div>
           </div>
+        ) : analysisState === "running" ? (
+          <div role="status" aria-live="polite" className="mt-3 flex items-center gap-3 text-sm text-stone-700">
+            <Spinner />
+            <span>{retryScenario ? "Loading sample vibe…" : "Analyzing your images…"}</span>
+          </div>
         ) : (
-          <p className="mt-3 text-sm text-stone-600">
-            {analysisState === "running"
-              ? retryScenario ? "Loading sample vibe…" : "Analyzing your images…"
-              : "No vibe profile yet."}
-          </p>
+          <p className="mt-3 text-sm text-stone-600">No vibe profile yet.</p>
         )}
 
         {analysisError && (
@@ -133,9 +134,31 @@ export function BoardDetail({ boardId }: { boardId: string }) {
         </label>
         {actionError && <p role="alert" className="mt-2 text-sm text-red-700">{actionError}</p>}
 
-        <BoardCommerce boardId={boardId} vibeName={board.vibe?.name ?? null} />
+        {board.vibe ? (
+          <BoardCommerce boardId={boardId} vibeName={board.vibe.name} />
+        ) : (
+          // Chat/cart depend on a vibe profile to choose what to search for
+          // (see shoppingAgent.ts's system prompt) — showing them before one
+          // exists let you "shop" against nothing. An empty state with the
+          // next action, not a hidden section, per the UX rule that empty
+          // states should point forward rather than just disappear.
+          <div className="mt-8 rounded-2xl border border-dashed border-stone-300 bg-white/50 p-6 text-center text-sm text-stone-600">
+            {analysisState === "running"
+              ? "Shopping unlocks once we've analyzed your board's vibe — hang tight."
+              : "Upload images or try a sample vibe above to unlock shopping."}
+          </div>
+        )}
       </motion.div>
     </Overlay>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg className="h-4 w-4 animate-spin text-stone-500" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   applyCartActions, getCart, getCheckout, getCheckoutProofs, preparePayments, refreshPayments,
   runMerchantCheckout, setCartBudget, shopWithAgent, startCheckout, updateCartItem,
@@ -9,18 +9,69 @@ import {
 
 type CartItem = Cart["items"][number];
 type Message = { id: number; role: "shopper" | "mosaic"; text: string; products?: CartItem[] };
+type LightboxImage = { url: string; alt: string };
 
 function money(cents: number, currency = "usd") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
 }
 
-function ProductThumb({ item, size = 48 }: { item: CartItem; size?: number }) {
+// Two separate click targets, not one: the thumbnail opens a bigger preview
+// (a native <dialog>, not a custom overlay — semantics first), the rest of
+// the card opens the real merchant page in a new tab. Nesting an <a> around
+// a <button> (or vice versa) is invalid HTML and makes clicks ambiguous, so
+// they're siblings instead.
+function ProductThumb({ item, size = 48, onOpen }: { item: CartItem; size?: number; onOpen?: (image: LightboxImage) => void }) {
   const style = { width: size, height: size };
-  if (item.product?.imageUrl) {
-    // eslint-disable-next-line @next/next/no-img-element -- arbitrary merchant-hosted URLs, not part of the Next.js image pipeline
-    return <img src={item.product.imageUrl} alt={item.product.name} style={style} className="shrink-0 rounded-lg border border-stone-200 object-cover" />;
+  if (!item.product?.imageUrl) {
+    return <div style={style} className="shrink-0 rounded-lg border border-stone-200 bg-stone-100" aria-hidden="true" />;
   }
-  return <div style={style} className="shrink-0 rounded-lg border border-stone-200 bg-stone-100" aria-hidden="true" />;
+  const img = (
+    // eslint-disable-next-line @next/next/no-img-element -- arbitrary merchant-hosted URLs, not part of the Next.js image pipeline
+    <img src={item.product.imageUrl} alt={item.product.name} style={style} className="shrink-0 rounded-lg border border-stone-200 object-cover" />
+  );
+  if (!onOpen) return img;
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen({ url: item.product!.imageUrl!, alt: item.product!.name })}
+      aria-label={`View a larger image of ${item.product.name}`}
+      className="shrink-0 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900"
+    >
+      {img}
+    </button>
+  );
+}
+
+// Wraps product name/merchant text in a link to the real merchant page when
+// one exists, so clicking the item (not its thumbnail) opens the source.
+function ProductLink({ url, className, children }: { url: string | null | undefined; className: string; children: React.ReactNode }) {
+  if (!url) return <div className={className}>{children}</div>;
+  return <a href={url} target="_blank" rel="noreferrer" className={`${className} hover:underline`}>{children}</a>;
+}
+
+function ImageLightbox({ image, onClose }: { image: LightboxImage | null; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (image && !dialog.open) dialog.showModal();
+    if (!image && dialog.open) dialog.close();
+  }, [image]);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      onClose={onClose}
+      onClick={(event) => { if (event.target === dialogRef.current) onClose(); }}
+      className="max-h-[90vh] max-w-[90vw] rounded-2xl bg-transparent p-0 backdrop:bg-black/70"
+    >
+      {image && (
+        // eslint-disable-next-line @next/next/no-img-element -- arbitrary merchant-hosted URL
+        <img src={image.url} alt={image.alt} className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain" />
+      )}
+    </dialog>
+  );
 }
 
 export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName: string | null }) {
@@ -28,6 +79,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
   const [checkout, setCheckout] = useState<Checkout | null>(null);
   const [paymentLinks, setPaymentLinks] = useState<Checkout | null>(null);
   const [browserProofs, setBrowserProofs] = useState<Record<string, CheckoutProof>>({});
+  const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [query, setQuery] = useState("");
   const [budgetInput, setBudgetInput] = useState("");
@@ -42,12 +94,18 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
         const returnedFromStripe = new URLSearchParams(window.location.search).has("merchant");
         const latestCheckout = returnedFromStripe ? await refreshPayments(boardId) : await getCheckout(boardId);
         const latestCart = await getCart(boardId);
-        const proofs = await getCheckoutProofs(boardId);
         if (!active) return;
         setCheckout(latestCheckout);
         setCart(latestCart);
-        setBrowserProofs(Object.fromEntries(proofs.map((proof) => [proof.productId, proof])));
         setBudgetInput(latestCart.budgetCents === null ? "" : String(latestCart.budgetCents / 100));
+        // Fetched separately: checkout proofs are supplementary display data,
+        // not required to use the cart, so a failure here (e.g. a pending
+        // migration) shouldn't take down cart/checkout loading with it —
+        // that coupling is exactly what made one broken endpoint look like
+        // "the whole cart is broken" before.
+        getCheckoutProofs(boardId)
+          .then((proofs) => { if (active) setBrowserProofs(Object.fromEntries(proofs.map((proof) => [proof.productId, proof]))); })
+          .catch((cause) => console.error("Could not load checkout proofs:", cause));
         if (returnedFromStripe) {
           window.history.replaceState(window.history.state, "", window.location.pathname);
         }
@@ -69,13 +127,17 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
     if (!message.trim() || busy || cart?.status !== "open") return;
     const priorItemIds = new Set(cart?.items.map((item) => item.id) ?? []);
     setMessages((current) => [...current, { id: Date.now(), role: "shopper", text: displayText }]);
+    // Cleared the instant the message is sent, not after the reply comes
+    // back — a request can take 10s+ (it's an LLM tool-calling loop), and
+    // waiting to clear until then left the sent text sitting in the box the
+    // whole time, plus never cleared it at all on error.
+    setQuery((current) => current.trim() === message.trim() ? "" : current);
     setBusy("shop");
     setError(null);
     try {
       const result = await shopWithAgent(boardId, message);
       setCart(result.cart);
       setBudgetInput(result.cart.budgetCents === null ? "" : String(result.cart.budgetCents / 100));
-      setQuery((current) => current.trim() === message ? "" : current);
       // Cart items the agent touched this turn (added, replaced, or swapped
       // in) — their cart_item id is new even though the productId slot may
       // be reused, so this catches add/replace/swap alike. Surfaced as a
@@ -227,11 +289,11 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
               <p>{message.text}</p>
               {message.products?.map((item) => (
                 <div key={item.id} className="flex items-center gap-2 rounded-xl bg-white/60 p-2">
-                  <ProductThumb item={item} />
-                  <div className="min-w-0">
+                  <ProductThumb item={item} onOpen={setLightboxImage} />
+                  <ProductLink url={item.product?.productUrl} className="min-w-0">
                     <p className="truncate font-medium text-stone-900">{item.product?.name ?? "Unavailable product"}</p>
                     <p className="text-xs text-stone-600">{item.product ? money(item.product.priceCents, item.product.currency) : null}</p>
-                  </div>
+                  </ProductLink>
                 </div>
               ))}
             </div>
@@ -254,11 +316,11 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
             {cart.items.length === 0 && <p className="text-sm text-stone-500">No items yet. Ask Mosaic what you want to shop for.</p>}
             {cart.items.map((item) => <div key={item.id} className="border-b border-stone-100 pb-4 text-sm">
               <div className="flex gap-3">
-                <ProductThumb item={item} size={56} />
-                <div className="min-w-0 flex-1">
+                <ProductThumb item={item} size={56} onOpen={setLightboxImage} />
+                <ProductLink url={item.product?.productUrl} className="min-w-0 flex-1">
                   <div className="flex justify-between gap-3"><p className="truncate font-medium text-stone-900">{item.product?.name ?? "Unavailable product"}</p><p className="whitespace-nowrap">{money(item.subtotalCents, cart.currency)}</p></div>
                   <p className="mt-1 text-xs text-stone-500">{item.product?.merchantName ?? "Merchant unavailable"}</p>
-                </div>
+                </ProductLink>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 <button type="button" aria-label={`Decrease ${item.product?.name ?? "item"} quantity`} disabled={Boolean(busy) || item.locked || item.quantity <= 1 || cart.status !== "open"} onClick={() => void changeItem(item, "decrease")} className="rounded border px-2 py-1 disabled:opacity-40">−</button>
@@ -318,6 +380,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
           <button type="button" disabled={Boolean(busy)} onClick={() => void checkPaymentStatus()} className="mt-2 w-full rounded-xl border border-stone-300 px-4 py-2.5 text-sm disabled:opacity-40">{busy === "refresh" ? "Checking…" : "Refresh payment status"}</button>
         </div>}
       </aside>
+      <ImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
     </div>
   );
 }
