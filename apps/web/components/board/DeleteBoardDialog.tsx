@@ -55,7 +55,7 @@ export function DeleteBoardDialog({
           Delete “{board.name}”?
         </h2>
         <p id="delete-board-description" className="mt-2 text-sm text-stone-600">
-          This permanently removes the board, its images, vibe profile, and saved shopping data.
+          This permanently removes the board, its images, and vibe profile. Shopping and checkout records are kept.
         </p>
         {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
         <div className="mt-6 flex justify-end gap-3">

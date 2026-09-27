@@ -71,3 +71,21 @@ test('deleteBoard removes the board and cleans up its image storage objects', as
 
   await expect(deleteBoard(GUEST_ID, board.id, client)).rejects.toMatchObject({ code: 'NOT_FOUND' })
 })
+
+test('deleteBoard detaches carts and preserves checkout records', async () => {
+  const { client, tables } = createFakeSupabase()
+  const board = await createBoard(GUEST_ID, 'Temporary', client)
+  const other = await createBoard(GUEST_ID, 'Keep', client)
+  tables.carts.push(
+    { id: 'cart-to-detach', board_id: board.id, guest_session_id: GUEST_ID },
+    { id: 'other-cart', board_id: other.id, guest_session_id: GUEST_ID },
+  )
+  tables.checkout_sessions.push({ id: 'checkout-to-preserve', cart_id: 'cart-to-detach', guest_session_id: GUEST_ID })
+
+  await deleteBoard(GUEST_ID, board.id, client)
+
+  expect(tables.carts[0].board_id).toBeNull()
+  expect(tables.carts[1].board_id).toBe(other.id)
+  expect(tables.checkout_sessions).toHaveLength(1)
+  expect(tables.boards.map((row) => row.id)).toEqual([other.id])
+})

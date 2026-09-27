@@ -182,9 +182,8 @@ export async function deleteImage(
   if (deleteError) throw new Error('Could not delete board image')
 }
 
-export async function removeBoardImageStorage(boardId: string, db: SupabaseClient = getSupabaseAdmin()): Promise<void> {
-  const records = await listBoardImageRecords(boardId, db)
-  if (records.length === 0) return
-  const { error } = await db.storage.from(IMAGE_BUCKET).remove(records.map((record) => record.storagePath))
+export async function removeBoardImageStorage(paths: string[], db: SupabaseClient = getSupabaseAdmin()): Promise<void> {
+  if (paths.length === 0) return
+  const { error } = await db.storage.from(IMAGE_BUCKET).remove(paths)
   if (error) throw new Error('Could not remove board images from storage')
 }

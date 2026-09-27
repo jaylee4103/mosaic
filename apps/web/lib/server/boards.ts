@@ -106,7 +106,16 @@ export async function deleteBoard(
   db: SupabaseClient = getSupabaseAdmin(),
 ): Promise<void> {
   await findOwnedBoardRow(guestId, boardId, db)
-  await removeBoardImageStorage(boardId, db)
+  const imagePaths = (await listBoardImageRecords(boardId, db)).map((image) => image.storagePath)
+  // Carts retain checkout and order history; board_id is nullable in the schema.
+  const { error: cartsError } = await db.from('carts').update({ board_id: null })
+    .eq('board_id', boardId).eq('guest_session_id', guestId)
+  if (cartsError) throw new Error('Could not detach board carts')
   const { error } = await db.from('boards').delete().eq('id', boardId).eq('guest_session_id', guestId)
   if (error) throw new Error('Could not delete board')
+  try {
+    await removeBoardImageStorage(imagePaths, db)
+  } catch (cause) {
+    console.warn(`[boards] board ${boardId} deleted, but image storage cleanup failed`, cause)
+  }
 }
