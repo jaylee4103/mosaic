@@ -133,6 +133,13 @@ Only `available: true` products are returned. Response `200`:
 ```
 AI owns query generation and vibe-based ranking on top of these results.
 
+### `POST /api/boards/:boardId/chat`
+Request JSON: `{ "message": "Find a warm lamp under $100" }`. The shopping agent reads the saved board vibe and cart, searches the demo catalog, chooses products, and applies cart actions immediately. Response `200`:
+```json
+{ "assistantMessage": "Added a ceramic lamp that matches your board.", "cart": { "...": "full updated cart" }, "steps": 3 }
+```
+The board UI uses the returned `cart` directly, so no product selection step is required. The server needs `OPENROUTER_API_KEY` for the default provider or `META_MODEL_API_KEY` with `AGENT_PROVIDER=meta`; missing configuration returns `503 AGENT_UNAVAILABLE`.
+
 ## Cart
 
 Each board has exactly one open cart, created automatically on first access — there's no separate "create cart" call. Item prices are **always resolved from the live `products` catalog**, never from the client or a cached value, so totals reflect the current catalog even if a price changes after an item was added. Every mutation endpoint returns the full, freshly recomputed cart (not just the changed item), so the client always has up-to-date totals.

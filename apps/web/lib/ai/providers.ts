@@ -21,7 +21,7 @@ const DEFAULT_META_MODEL = 'muse-spark-1.3'
 
 function openrouterModel(modelId: string): LanguageModel {
   const apiKey = process.env.OPENROUTER_API_KEY
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured')
+  if (!apiKey) throw Object.assign(new Error('Shopping assistant is not configured. Set OPENROUTER_API_KEY on the server.'), { code: 'AGENT_UNAVAILABLE' })
   const provider = createOpenAICompatible({
     name: 'openrouter',
     baseURL: 'https://openrouter.ai/api/v1',
@@ -32,7 +32,7 @@ function openrouterModel(modelId: string): LanguageModel {
 
 function metaModel(modelId: string): LanguageModel {
   const apiKey = process.env.META_MODEL_API_KEY
-  if (!apiKey) throw new Error('META_MODEL_API_KEY is not configured')
+  if (!apiKey) throw Object.assign(new Error('Shopping assistant is not configured. Set META_MODEL_API_KEY on the server.'), { code: 'AGENT_UNAVAILABLE' })
   const provider = createOpenAICompatible({
     name: 'meta',
     baseURL: 'https://api.meta.ai/v1',

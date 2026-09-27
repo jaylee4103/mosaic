@@ -55,6 +55,8 @@ export type CartAction =
   | { type: "REPLACE"; removeProductId: string; addProductId: string }
   | { type: "SET_BUDGET"; budgetCents: number | null };
 
+export type ShoppingReply = { assistantMessage: string; cart: Cart; steps: number };
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, cache: "no-store" });
   const body: unknown = await response.json().catch(() => null);
@@ -162,6 +164,14 @@ export async function searchProducts(query: string, maxPriceCents?: number): Pro
   if (maxPriceCents !== undefined) params.set("maxPrice", String(maxPriceCents));
   const { products } = await request<{ products: Product[] }>(`/api/products/search?${params}`);
   return products;
+}
+
+export async function shopWithAgent(boardId: string, message: string): Promise<ShoppingReply> {
+  return request<ShoppingReply>(`/api/boards/${encodeURIComponent(boardId)}/chat`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
 }
 
 const inFlightCarts = new Map<string, Promise<Cart>>();

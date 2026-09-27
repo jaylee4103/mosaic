@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { analyzeBoard, applyCartActions, createBoard, getBoards, getCart, getCheckout, preparePayments, previewVibe, refreshPayments, searchProducts, setCartBudget, startCheckout } from '../lib/boards/store'
+import { analyzeBoard, applyCartActions, createBoard, getBoards, getCart, getCheckout, preparePayments, previewVibe, refreshPayments, searchProducts, setCartBudget, shopWithAgent, startCheckout } from '../lib/boards/store'
 
 const originalFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = originalFetch })
@@ -128,4 +128,17 @@ test('sample vibe UI calls the board mock analysis route', async () => {
   }) as typeof fetch
 
   await previewVibe('board-1', 'alpine')
+})
+
+test('shopping conversation sends one request and receives an updated cart', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    expect(String(input)).toBe('/api/boards/board-1/chat')
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(String(init?.body))).toEqual({ message: 'Find a warm lamp under $100' })
+    return Response.json({ assistantMessage: 'Added a lamp.', cart: { items: [{ productId: 'lamp' }], totalCents: 5500 }, steps: 3 })
+  }) as typeof fetch
+
+  const reply = await shopWithAgent('board-1', 'Find a warm lamp under $100')
+  expect(reply.assistantMessage).toBe('Added a lamp.')
+  expect(reply.cart.items[0].productId).toBe('lamp')
 })
