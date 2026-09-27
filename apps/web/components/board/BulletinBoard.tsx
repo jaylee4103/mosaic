@@ -38,12 +38,6 @@ export function BulletinBoard() {
             your worlds, all in one place
           </p>
         </div>
-        <button
-          onClick={() => openCreate()}
-          className="rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium text-white shadow-md transition hover:bg-stone-700"
-        >
-          + new board
-        </button>
       </div>
 
       <div className="rounded-[28px] bg-[#fbfaf6] p-3 shadow-[0_30px_60px_-15px_rgba(60,40,20,0.35)] sm:p-5">
