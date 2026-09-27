@@ -44,7 +44,13 @@ $browserToken = [Convert]::ToHexString($bytes).ToLowerInvariant()
 if (-not (Select-String -Path .env -Pattern '^BROWSER_SERVICE_TOKEN=' -Quiet)) { Add-Content .env "BROWSER_SERVICE_TOKEN=$browserToken" }
 ```
 
-These commands keep existing token values so they continue to match Vercel.
+The browser navigation agent also needs the existing OpenRouter key. Copy it from the web app's ignored `.env.local` into the repository's ignored root `.env` so Compose can pass it to the browser container. Use the same value for both services; do not commit either file or paste the key into chat.
+
+```powershell
+notepad .env
+```
+
+Add `OPENROUTER_API_KEY=...` using the value already in `apps/web/.env.local`. These commands keep existing token values so they continue to match Vercel.
 
 ## 3. Start and check the services
 

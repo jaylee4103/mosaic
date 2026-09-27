@@ -4,7 +4,7 @@ Vercel hosts `apps/web` (including the shopping agent). The Windows PC keeps CPU
 
 ## Prepare the PC
 
-Start from the browser-service branch (or `main` after it is merged). Keep `apps/web/.env.local` and the root `.env` file on the PC; both are ignored by Git. Generate `ML_SERVICE_TOKEN` and a separate `BROWSER_SERVICE_TOKEN` in the root `.env` as described in [Windows PC server setup](windows-pc-server.md). Keep existing tokens so the Vercel values continue to match.
+Start from `main` after the browser-service branch is merged. Keep `apps/web/.env.local` and the root `.env` file on the PC; both are ignored by Git. Generate `ML_SERVICE_TOKEN` and a separate `BROWSER_SERVICE_TOKEN` in the root `.env` as described in [Windows PC server setup](windows-pc-server.md). Copy the existing `OPENROUTER_API_KEY` to the root `.env` too, so the browser navigation agent can use it. Keep existing tokens so the Vercel values continue to match.
 
 In PowerShell, from the repository root:
 

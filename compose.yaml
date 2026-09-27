@@ -37,6 +37,7 @@ services:
     build: ./apps/browser
     environment:
       BROWSER_SERVICE_TOKEN: ${BROWSER_SERVICE_TOKEN:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
     ports:
       - "127.0.0.1:8100:8100"
     shm_size: "1gb"
