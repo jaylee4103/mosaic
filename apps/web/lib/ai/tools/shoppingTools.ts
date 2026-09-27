@@ -76,7 +76,7 @@ export function createShoppingTools(
             const vibeProfile = await db.from('vibe_profiles').select('profile_json').eq('board_id', boardId).maybeSingle()
             if ((vibeProfile as { data: { profile_json: Record<string, unknown> } } | null)?.data) {
               const vp = (vibeProfile as { data: { profile_json: Record<string, unknown> } }).data.profile_json
-              await performSearch({ profile: vp, name: '', description: null, updatedAt: '' } as any, query, guestId, db)
+              await performSearch({ profile: vp, name: '', description: null, updatedAt: '' } as any, query ?? '', guestId, db)
             }
           } catch (err) {
             console.error('[shopping-tools] Internet search failed:', err)

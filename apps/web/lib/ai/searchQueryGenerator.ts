@@ -36,7 +36,7 @@ User request: ${userRequest}`,
 
     // Parse the LLM's response as JSON array
     const text = result.text.trim()
-    const jsonMatch = text.match(/\[.*\]/s)
+    const jsonMatch = text.match(/\[[\s\S]*\]/)
     if (jsonMatch) {
       const queries = JSON.parse(jsonMatch[0]) as string[]
       console.log(`[searchQueryGenerator] Generated ${queries.length} queries`)
