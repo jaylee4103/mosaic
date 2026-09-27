@@ -36,6 +36,8 @@ docker compose logs --tail=100 tunnel
 
 Copy only the generated `https://....trycloudflare.com` URL. Anyone can reach that URL, but ML endpoints still require the bearer token. This testing URL changes when the tunnel container restarts and Cloudflare does not guarantee Quick Tunnel uptime. For a stable demo, add a domain to Cloudflare, create a named tunnel, and route a hostname such as `ml.example.com` to `http://ml:8000` using a named tunnel connector in Compose. The Quick Tunnel command is only for testing.
 
+Stop public access with `docker compose --profile tunnel stop tunnel`.
+
 ## Configure Vercel
 
 Use the existing Vercel `mosaic` project, which is already connected to GitHub with **Root Directory** set to `apps/web`. Push `vyang/feat-checkout-conversation-ui` for a Preview deployment until its changes are merged into `main`; keep the project's production branch on `main`. Set these **server-side** environment variables for the Preview environment in Vercel; do not add `NEXT_PUBLIC_` to any secret:
