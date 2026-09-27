@@ -35,26 +35,25 @@ Out of scope (future work):
 ## 3. Where This Fits
 
 ```
-apps/web (Next.js)                          apps/ml (FastAPI + Playwright)
-─────────────────────                        ──────────────────────────────
-shoppingTools.ts                              browser_service.py
-  browse_webpage ───────────┐                   browse(url)
-  browse_summary ────────────┼─── HTTP ────►     browse_summary(url)
-  start_merchant_checkout ───┘                   NEW: run_checkout_flow(steps)
-       │
+apps/web (Next.js)                          apps/browser (Bun + Playwright, NEW service)
+─────────────────────                        ────────────────────────────────────────────
+shoppingTools.ts                              src/server.ts
+  run_merchant_checkout ─────── HTTP ────►      POST /api/browse/checkout
+       │                                          └── src/checkoutFlow.ts: runCheckoutFlow()
        ▼
 lib/server/browserCheckout.ts (NEW)
-  - loads cart, groups by merchant (reuse groupCartForCheckout)
-  - for each browser-method merchant group:
-      POST {ML_SERVICE_URL}/api/browse/checkout
-      persist screenshot + trace to Postgres
+  - loads product + merchant, asserts checkout_method === 'browser'
+  - POST {BROWSER_SERVICE_URL}/api/browse/checkout
+  - uploads screenshot to Supabase Storage, persists trace to Postgres
        │
        ▼
-checkout_proofs table (NEW) ── read by ── /app/api/boards/[boardId]/checkout/proof (NEW route)
+checkout_proofs table (NEW) ── read by ── GET /app/api/boards/[boardId]/checkout/proof (NEW route)
                                               │
                                               ▼
                                         UI renders screenshot + step trace
 ```
+
+`apps/browser` is a standalone service, separate from `apps/ml` (which keeps `browse_webpage`/`browse_summary` for read-only page fetches). Checkout flows run 30-60s and carry real crash/hang risk from driving arbitrary third-party sites — isolating that from `apps/ml`'s model-serving process means a wedged checkout browser session can't back up vibe-detection requests.
 
 The existing `checkout.ts` Stripe flow is untouched. This is a parallel path specifically for `merchants.checkout_method = 'browser'`.
 
@@ -69,10 +68,14 @@ run_merchant_checkout: tool({
   description: `Attempt to add a cart item's product to its merchant's real site cart and
 walk their checkout flow up to (but never past) the payment-submission step. Returns a
 screenshot proving the flow reached checkout, or an error if a step failed. Never completes
-a real purchase.`,
+a real purchase. Only works for browser-checkout merchants — Stripe merchants reject this call.`,
   inputSchema: z.object({ productId: z.string() }),
   execute: logged('run_merchant_checkout', async ({ productId }) => {
-    return await runMerchantCheckout(boardId, productId, db)
+    try {
+      return { ok: true, proof: await runMerchantCheckout(guestId, boardId, productId, db) }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
   }),
 }),
 ```
@@ -81,13 +84,13 @@ The agent calls this per cart item (or the user asks "prove you can check these 
 
 ---
 
-## 5. Browser Automation Steps (ML service)
+## 5. Browser Automation Steps (apps/browser)
 
-New function in `apps/ml/app/services/browser_service.py`, new route in `apps/ml/app/routes/`.
+`src/checkoutFlow.ts` in the new service, called by `src/server.ts`'s `POST /api/browse/checkout`.
 
-```python
-async def run_checkout_flow(product_url: str, quantity: int = 1) -> CheckoutFlowResult:
-    """
+```ts
+async function runCheckoutFlow(options: CheckoutFlowOptions): Promise<CheckoutFlowResult> {
+    /*
     1. Navigate to product_url
     2. Find + click an "Add to Cart" control (selector heuristics, §6)
     3. Navigate to the site's cart page (heuristics, or the site auto-redirects)
@@ -100,22 +103,24 @@ async def run_checkout_flow(product_url: str, quantity: int = 1) -> CheckoutFlow
     """
 ```
 
-**Result shape:**
+**Result shape** (`apps/browser/src/types.ts`):
 
-```python
-class CheckoutStep(TypedDict):
-    step: str            # "add_to_cart" | "open_cart" | "begin_checkout" | "fill_shipping" | "reach_payment_gate"
-    success: bool
-    url: str
-    detail: str | None   # e.g. which selector matched, or why it failed
+```ts
+interface CheckoutStep {
+  step: 'add_to_cart' | 'open_cart' | 'begin_checkout' | 'fill_shipping' | 'reach_payment_gate'
+  success: boolean
+  url: string
+  detail: string | null   // e.g. which selector matched, or why it failed
+}
 
-class CheckoutFlowResult(TypedDict):
-    success: bool                 # True iff it reached the payment gate without submitting
-    stopped_reason: str           # "payment_gate_reached" | "selector_not_found" | "captcha_detected" | "timeout" | "login_required"
-    screenshot_base64: str | None # PNG of the final page reached
-    final_url: str
-    steps: list[CheckoutStep]
-    error: str | None
+interface CheckoutFlowResult {
+  success: boolean                    // True iff it reached the payment gate without submitting
+  stoppedReason: StoppedReason        // 'payment_gate_reached' | 'selector_not_found' | 'captcha_detected' | 'timeout' | 'login_required' | ...
+  screenshotBase64: string | null      // PNG of the final page reached
+  finalUrl: string
+  steps: CheckoutStep[]
+  error: string | null
+}
 ```
 
 Each step is attempted with a bounded timeout (10s) and a bounded total flow timeout (60s). Any step failure stops the flow immediately and returns what was captured so far — a partial trace is still useful proof-of-work, not a hard error.
@@ -126,26 +131,27 @@ Each step is attempted with a bounded timeout (10s) and a bounded total flow tim
 
 No merchant-specific adapter is required for the MVP. Use an ordered list of common selector/text patterns, trying each until one matches a visible, enabled element:
 
-```python
-ADD_TO_CART_PATTERNS = [
-    "button[name='add']",                       # Shopify default
-    "button[data-testid*='add-to-cart' i]",
-    "button:has-text('Add to cart')",
-    "button:has-text('Add to Bag')",
-    "input[value*='Add to Cart' i]",
-    "#add-to-cart-button",                       # WooCommerce default id
-    "button.single_add_to_cart_button",          # WooCommerce class
+```ts
+// apps/browser/src/selectors.ts
+export const ADD_TO_CART_PATTERNS = [
+  "button[name='add']",                       // Shopify default
+  "button[data-testid*='add-to-cart' i]",
+  "button:has-text('Add to cart')",
+  "button:has-text('Add to Bag')",
+  "input[value*='Add to Cart' i]",
+  '#add-to-cart-button',                       // WooCommerce default id
+  'button.single_add_to_cart_button',          // WooCommerce class
 ]
 
-CHECKOUT_PATTERNS = [
-    "a[href*='/checkout' i]",
-    "button:has-text('Checkout')",
-    "a:has-text('Proceed to Checkout')",
-    "button[name='checkout']",
+export const CHECKOUT_PATTERNS = [
+  "a[href*='/checkout' i]",
+  "button:has-text('Checkout')",
+  "a:has-text('Proceed to Checkout')",
+  "button[name='checkout']",
 ]
 ```
 
-This mirrors Playwright's own recommended `:has-text` / role-based fallback-chain pattern already available in the installed Playwright version (`apps/ml/.venv/.../playwright-tests.md` skill references this style). If every pattern in a list fails, the step fails with `selector_not_found` and the trace records which patterns were tried.
+This uses Playwright's `:has-text` fallback-chain style. If every pattern in a list fails, the step fails with `selector_not_found` and the trace records which patterns were tried.
 
 A small **per-merchant override table** (keyed by `merchants.slug`) can supply a tuned selector list where the generic heuristics are known to fail — stored as a JSON column (`merchants.checkout_selectors`, nullable) rather than a code adapter, so it's a data fix, not a deploy.
 
@@ -183,21 +189,22 @@ The moment the gate trips, the flow **stops, screenshots, and returns success** 
 ```sql
 create table public.checkout_proofs (
   id uuid primary key default gen_random_uuid(),
-  board_id uuid not null references public.boards(id),
+  board_id uuid not null references public.boards(id) on delete cascade,
   guest_session_id text not null,
-  product_id uuid not null references public.products(id),
-  merchant_id uuid not null references public.merchants(id),
+  product_id uuid not null references public.products(id) on delete cascade,
+  merchant_id uuid not null references public.merchants(id) on delete cascade,
   success boolean not null,
   stopped_reason text not null,
   final_url text not null,
-  screenshot_url text,        -- uploaded to Supabase Storage, not stored inline
-  steps_json jsonb not null,  -- CheckoutStep[]
+  screenshot_path text,       -- uploaded to Supabase Storage; signed URL generated on read
+  steps_json jsonb not null default '[]',
   error text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  unique (board_id, product_id)  -- latest attempt per item replaces the earlier row
 );
 ```
 
-Screenshots go to Supabase Storage (a `checkout-proofs` bucket), not inline base64 in Postgres — the ML service returns base64, the web app uploads it and stores only the resulting URL.
+Screenshots go to Supabase Storage (`mosaic-checkout-proofs` bucket), not inline base64 in Postgres — `apps/browser` returns base64, the web app uploads it and stores only the resulting storage path, signing a fresh URL on each read (mirrors `board-images.ts`).
 
 ---
 
@@ -205,8 +212,8 @@ Screenshots go to Supabase Storage (a `checkout-proofs` bucket), not inline base
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `POST {ML_SERVICE_URL}/api/browse/checkout` | ML service, internal | `{ productUrl, quantity }` → `CheckoutFlowResult` |
-| `apps/web/lib/server/browserCheckout.ts::runMerchantCheckout(boardId, productId, db)` | server function | Orchestrates: load product/merchant, call ML endpoint, upload screenshot, insert `checkout_proofs` row |
+| `POST {BROWSER_SERVICE_URL}/api/browse/checkout` | apps/browser, internal | `{ productUrl, quantity, addToCartSelectors?, checkoutSelectors? }` → `CheckoutFlowResult` |
+| `apps/web/lib/server/browserCheckout.ts::runMerchantCheckout(guestId, boardId, productId, db)` | server function | Orchestrates: load product/merchant, call apps/browser, upload screenshot, upsert `checkout_proofs` row |
 | `GET /api/boards/[boardId]/checkout/proof` | Next.js route (NEW) | List proofs for the board, for UI display |
 | `run_merchant_checkout` tool | agent tool | Wraps `runMerchantCheckout`, returns result to the agent/chat |
 
@@ -221,7 +228,7 @@ Screenshots go to Supabase Storage (a `checkout-proofs` bucket), not inline base
 | CAPTCHA / bot-check page detected (title/text match `verify you are human`, `captcha`) | Fail immediately, `stopped_reason: 'captcha_detected'` |
 | Flow exceeds 60s total | Abort, return steps captured so far, `stopped_reason: 'timeout'` |
 | Payment gate never appears before checkout flow ends (e.g. free-item checkout) | Treat final reachable page as best-effort proof; `success: false`, `stopped_reason: 'payment_gate_not_found'` |
-| ML service unreachable | Tool returns `{ ok: false, error: 'browser service unavailable' }`, no partial DB row |
+| apps/browser unreachable | Tool returns `{ ok: false, error: '...' }`, no partial DB row |
 | Merchant is not `checkout_method: 'browser'` | Tool rejects immediately — this flow is only for browser-checkout merchants; Stripe merchants use the existing `checkout.ts` path |
 
 ---
@@ -229,7 +236,7 @@ Screenshots go to Supabase Storage (a `checkout-proofs` bucket), not inline base
 ## 12. Security & Safety
 
 - **No real payment data ever entered.** Placeholder identity only (§7); the flow structurally cannot reach a card-entry action because the gate check (§8) runs before every click.
-- Headless browser runs server-side only (ML service), same sandboxed Chromium already used for `browse_webpage`/`browse_summary` — no new browser surface.
+- Headless browser runs server-side only, in the isolated `apps/browser` service — same sandboxed Chromium launch args as `apps/ml`'s `browse_webpage`/`browse_summary`, just a separate process so a wedged checkout session can't back up model-serving requests.
 - Screenshots may contain the merchant's page chrome/ads; stored in a private Supabase bucket, not public.
 - Rate-limit `run_merchant_checkout` per board (e.g. max 5 calls per cart per hour) to avoid hammering third-party sites and triggering their bot defenses.
 - If a merchant site's `robots.txt` disallows the checkout path, skip and report `stopped_reason: 'disallowed_by_robots'` rather than proceeding.
