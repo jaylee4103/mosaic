@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useBoards } from "@/lib/boards/useBoards";
+import type { Board } from "@/types/board";
 import { LAYOUT_SLOTS } from "@/lib/boards/layoutSlots";
 import { BoardSlot } from "./BoardSlot";
 import { ProjectPin } from "./ProjectPin";
 import { PlaceholderPin } from "./PlaceholderPin";
 import { CreateBoardModal } from "./CreateBoardModal";
+import { DeleteBoardDialog } from "./DeleteBoardDialog";
 
 const INVITE_PROMPTS = ["your room", "an outfit", "a trip", "a gift"];
 
@@ -18,6 +20,7 @@ export function BulletinBoard() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [createDefaultName, setCreateDefaultName] = useState("");
+  const [boardToDelete, setBoardToDelete] = useState<Board | null>(null);
 
   function openCreate(defaultName = "") {
     setCreateDefaultName(defaultName);
@@ -86,7 +89,7 @@ export function BulletinBoard() {
                         }
                         return (
                           <BoardSlot key={board.id} slot={slot}>
-                            <ProjectPin board={board} rotate={slot.rotate} />
+                            <ProjectPin board={board} rotate={slot.rotate} onRequestDelete={setBoardToDelete} />
                           </BoardSlot>
                         );
                       })}
@@ -111,6 +114,9 @@ export function BulletinBoard() {
           initialName={createDefaultName}
           onClose={() => setShowCreate(false)}
         />
+      )}
+      {boardToDelete && (
+        <DeleteBoardDialog board={boardToDelete} onClose={() => setBoardToDelete(null)} />
       )}
     </div>
   );

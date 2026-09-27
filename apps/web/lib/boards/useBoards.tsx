@@ -93,6 +93,7 @@ export function BoardsProvider({ children }: { children: React.ReactNode }) {
   const removeBoard = useCallback(
     async (boardId: string) => {
       await store.deleteBoard(boardId);
+      setBoards((current) => current.filter((board) => board.id !== boardId));
       await refresh();
     },
     [refresh]

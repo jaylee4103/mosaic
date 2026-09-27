@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { analyzeBoard, applyCartActions, createBoard, getBoards, getCart, getCheckout, preparePayments, previewVibe, refreshPayments, searchProducts, setCartBudget, shopWithAgent, startCheckout } from '../lib/boards/store'
+import { analyzeBoard, applyCartActions, createBoard, deleteBoard, getBoards, getCart, getCheckout, preparePayments, previewVibe, refreshPayments, searchProducts, setCartBudget, shopWithAgent, startCheckout } from '../lib/boards/store'
 
 const originalFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = originalFetch })
@@ -141,4 +141,14 @@ test('shopping conversation sends one request and receives an updated cart', asy
   const reply = await shopWithAgent('board-1', 'Find a warm lamp under $100')
   expect(reply.assistantMessage).toBe('Added a lamp.')
   expect(reply.cart.items[0].productId).toBe('lamp')
+})
+
+test('board deletion calls the guest-scoped delete route', async () => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    expect(String(input)).toBe('/api/boards/board-1')
+    expect(init?.method).toBe('DELETE')
+    return Response.json({ ok: true })
+  }) as typeof fetch
+
+  await deleteBoard('board-1')
 })
