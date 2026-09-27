@@ -3,6 +3,7 @@ import { assertBoardOwnership } from './board-ownership'
 import { IMAGE_BUCKET, listBoardImageRecords } from './board-images'
 import { validationError } from './errors'
 import { getSupabaseAdmin } from './supabase'
+import { mlServiceHeaders } from './ml-service'
 import { saveVibeProfile, type VibeProfile } from './vibe-profile'
 
 const ANALYSIS_TIMEOUT_MS = 90_000
@@ -44,6 +45,7 @@ export async function analyzeBoardMock(
   try {
     response = await fetcher(url.toString(), {
       method: 'POST',
+      headers: mlServiceHeaders(),
       body: new FormData(),
       signal: AbortSignal.timeout(15_000),
       cache: 'no-store',
@@ -91,6 +93,7 @@ export async function analyzeBoard(
   try {
     response = await fetcher(url, {
       method: 'POST',
+      headers: mlServiceHeaders(),
       body: form,
       signal: AbortSignal.timeout(ANALYSIS_TIMEOUT_MS),
       cache: 'no-store',

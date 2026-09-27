@@ -100,11 +100,11 @@ export function BoardDetail({ boardId }: { boardId: string }) {
         </div>
         {actionError && <p role="alert" className="mt-2 text-sm text-red-700">{actionError}</p>}
 
-        <h1 className="mt-6 font-[family-name:var(--font-fraunces)] text-3xl text-stone-900">{board.name}</h1>
+        <h1 className="mt-6 font-heading text-3xl text-stone-900">{board.name}</h1>
 
         {board.vibe ? (
           <div className="mt-3">
-            <p className="font-[family-name:var(--font-fraunces)] text-lg text-stone-700">{board.vibe.name}</p>
+            <p className="font-heading text-lg text-stone-700">{board.vibe.name}</p>
             {board.vibe.description && <p className="mt-1 text-sm text-stone-500">{board.vibe.description}</p>}
             <div className="mt-3 flex flex-wrap gap-2">
               {[...board.vibe.colors, ...board.vibe.materials, ...board.vibe.qualities].map((tag) => (

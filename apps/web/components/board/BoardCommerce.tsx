@@ -179,7 +179,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
   }
 
   async function sendToAgent(message: string, displayText = message) {
-    if (!message.trim() || busy || cart?.status !== "open") return;
+    if (!message.trim() || busy || cart?.status !== "open") return false;
     const priorItemIds = new Set(cart?.items.map((item) => item.id) ?? []);
     const streamId = Date.now() + 1;
     setMessages((current) => [
@@ -209,11 +209,12 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
         ...m,
         text: result.assistantMessage.trim() || "I reviewed your request. Check the cart for any changes.",
         products: touchedItems.length > 0 ? touchedItems : undefined,
-        streaming: false,
-      } : m));
+      }]);
+      return true;
     } catch (cause) {
       setMessages((current) => current.filter((m) => m.id !== streamId));
       report(cause, "Could not shop for products");
+      return false;
     } finally {
       setBusy(null);
       setAgentActivity(null);
@@ -222,7 +223,11 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
 
   async function submitMessage(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await sendToAgent(query.trim());
+    const message = query.trim();
+    if (!message || busy || cart?.status !== "open") return;
+    setQuery("");
+    const sent = await sendToAgent(message);
+    if (!sent) setQuery((current) => current || message);
   }
 
   async function changeItem(item: Cart["items"][number], action: "lock" | "remove" | "decrease" | "increase") {
@@ -338,7 +343,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
       <section aria-label="Shopping conversation" className="min-w-0">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <h2 className="font-[family-name:var(--font-fraunces)] text-2xl text-stone-900">Shop this vibe</h2>
+            <h2 className="font-heading text-2xl text-stone-900">Shop this vibe</h2>
             <p className="mt-1 text-sm text-stone-500">{vibeName ? `Inspired by ${vibeName}. ` : ""}Tell Mosaic what you want, and it will add its pick to your cart.</p>
           </div>
         </div>
@@ -379,7 +384,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
       </section>
 
       <aside aria-label="Cart and checkout" className="min-w-0 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-        <h2 className="font-[family-name:var(--font-fraunces)] text-2xl text-stone-900">Your cart</h2>
+        <h2 className="font-heading text-2xl text-stone-900">Your cart</h2>
         {loading && <p className="mt-3 text-sm text-stone-500">Loading cart…</p>}
         {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {cart && <>

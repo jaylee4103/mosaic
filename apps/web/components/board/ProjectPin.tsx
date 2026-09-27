@@ -66,7 +66,7 @@ export function ProjectPin({
           )}
         </div>
 
-        <h3 className="mt-3 truncate font-[family-name:var(--font-fraunces)] text-lg text-stone-900">
+        <h3 className="mt-3 truncate font-heading text-lg text-stone-900">
           {board.name}
         </h3>
 

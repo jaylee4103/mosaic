@@ -4,6 +4,8 @@
  * and return page content. The browser runs in the ML service,
  * not in the Next.js app.
  */
+import { mlServiceHeaders } from './ml-service'
+
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL ?? "http://localhost:8000"
 
 export async function browseWebpage(url: string): Promise<{
@@ -17,7 +19,7 @@ export async function browseWebpage(url: string): Promise<{
   try {
     const response = await fetch(`${ML_SERVICE_URL}/api/browse`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: mlServiceHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ url }),
     })
 
@@ -46,7 +48,7 @@ export async function getPageSummary(url: string): Promise<{
   try {
     const response = await fetch(`${ML_SERVICE_URL}/api/browse/summary`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: mlServiceHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ url }),
     })
 

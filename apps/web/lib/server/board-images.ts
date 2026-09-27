@@ -6,7 +6,7 @@ import { getSupabaseAdmin } from './supabase'
 
 export const IMAGE_BUCKET = 'mosaic-board-images'
 const SIGNED_URL_TTL_SECONDS = 60 * 60
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024
 const EXTENSION_BY_MIME_TYPE: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -87,7 +87,7 @@ export async function addImage(
   const extension = EXTENSION_BY_MIME_TYPE[input.mimeType]
   if (!extension) throw validationError('Image must be JPEG, PNG, or WebP')
   if (input.bytes.byteLength === 0 || input.bytes.byteLength > MAX_IMAGE_BYTES) {
-    throw validationError('Image must be between 1 byte and 10 MB')
+    throw validationError('Image must be between 1 byte and 4 MB')
   }
 
   const { count, error: countError } = await db
