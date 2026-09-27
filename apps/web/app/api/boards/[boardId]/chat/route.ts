@@ -1,12 +1,13 @@
-import { getOrCreateGuest, type GuestSession } from '@/lib/server/guest-session'
-import { json, routeError } from '@/lib/server/http'
+import { getOrCreateGuest, guestCookie, type GuestSession } from '@/lib/server/guest-session'
+import { routeError } from '@/lib/server/http'
 import { validationError } from '@/lib/server/errors'
-import { runShoppingAgentTurn } from '@/lib/ai/shoppingAgent'
+import { runShoppingAgentTurnStream } from '@/lib/ai/shoppingAgent'
 
 export const runtime = 'nodejs'
 
 type Context = { params: Promise<{ boardId: string }> }
 
+// Streams newline-delimited JSON events (ShoppingStreamEvent) instead of one buffered body.
 export async function POST(request: Request, { params }: Context) {
   let guest: GuestSession | undefined
   try {
@@ -18,8 +19,27 @@ export async function POST(request: Request, { params }: Context) {
       throw validationError('Request body must be { message: string }')
     }
 
-    const result = await runShoppingAgentTurn({ guestId: guest.id, boardId, userMessage })
-    return json(result, 200, guest)
+    const guestId = guest.id
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          for await (const event of runShoppingAgentTurnStream({ guestId, boardId, userMessage })) {
+            controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
+          }
+        } catch (err) {
+          console.error(`[chat-route] stream failed: ${err instanceof Error ? err.stack : String(err)}`)
+          const message = err instanceof Error ? err.message : 'Request failed'
+          controller.enqueue(encoder.encode(`${JSON.stringify({ type: 'error', message })}\n`))
+        } finally {
+          controller.close()
+        }
+      },
+    })
+
+    const headers = new Headers({ 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' })
+    if (guest.newToken) headers.set('set-cookie', guestCookie(guest.newToken))
+    return new Response(stream, { headers })
   } catch (error) {
     console.error(`[chat-route] request failed: ${error instanceof Error ? error.stack : String(error)}`)
     return routeError(error, guest)

@@ -188,12 +188,53 @@ export async function searchProducts(query: string, maxPriceCents?: number): Pro
   return products;
 }
 
-export async function shopWithAgent(boardId: string, message: string): Promise<ShoppingReply> {
-  return request<ShoppingReply>(`/api/boards/${encodeURIComponent(boardId)}/chat`, {
+export type ShoppingStreamEvent =
+  | { type: "text-delta"; text: string }
+  | { type: "tool-call"; toolName: string }
+  | { type: "done"; assistantMessage: string; cart: Cart; steps: number }
+  | { type: "error"; message: string };
+
+// The chat route streams newline-delimited JSON; onEvent drives live text and an activity indicator.
+export async function shopWithAgent(
+  boardId: string,
+  message: string,
+  onEvent?: (event: ShoppingStreamEvent) => void,
+): Promise<ShoppingReply> {
+  const response = await fetch(`/api/boards/${encodeURIComponent(boardId)}/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ message }),
+    cache: "no-store",
   });
+  if (!response.ok || !response.body) {
+    const body: unknown = await response.json().catch(() => null);
+    const fallback = body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : `Request failed (${response.status})`;
+    throw new Error(fallback);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: ShoppingReply | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newlineIndex = buffer.indexOf("\n");
+    while (newlineIndex >= 0) {
+      const line = buffer.slice(0, newlineIndex).trim();
+      buffer = buffer.slice(newlineIndex + 1);
+      newlineIndex = buffer.indexOf("\n");
+      if (!line) continue;
+      const event = JSON.parse(line) as ShoppingStreamEvent;
+      if (event.type === "error") throw new Error(event.message);
+      if (event.type === "done") result = { assistantMessage: event.assistantMessage, cart: event.cart, steps: event.steps };
+      else onEvent?.(event);
+    }
+  }
+  if (!result) throw new Error("Agent stream ended without a result");
+  return result;
 }
 
 const inFlightCarts = new Map<string, Promise<Cart>>();

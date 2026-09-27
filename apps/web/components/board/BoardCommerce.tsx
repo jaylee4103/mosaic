@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import {
   applyCartActions, getCart, getCheckout, getCheckoutProofs, preparePayments, refreshPayments,
   runMerchantCheckout, setCartBudget, shopWithAgent, startCheckout, updateCartItem,
@@ -8,19 +9,127 @@ import {
 } from "@/lib/boards/store";
 
 type CartItem = Cart["items"][number];
-type Message = { id: number; role: "shopper" | "mosaic"; text: string; products?: CartItem[] };
+type Message = { id: number; role: "shopper" | "mosaic"; text: string; products?: CartItem[]; streaming?: boolean };
+type LightboxImage = { url: string; alt: string };
 
 function money(cents: number, currency = "usd") {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
 }
 
-function ProductThumb({ item, size = 48 }: { item: CartItem; size?: number }) {
+// Rotates while idle; swaps to a real tool label the instant one is active.
+const LOADING_WORDS = [
+  "Vibing", "Sensing", "Scouting", "Curating", "Rummaging", "Cross-checking",
+  "Noodling", "Percolating", "Sniffing around", "Eyeballing options", "Daydreaming",
+  "Window shopping", "Mood-boarding", "Pondering", "Taste-testing", "Digging in",
+  "Locking in", "Manifesting", "Vibe-checking", "Glowing up the cart", "Serving looks",
+  "Main character energy", "It's giving searching", "Understood the assignment", "Aura farming",
+  "Girl-mathing the budget", "Rizzing up options", "No cap, searching", "Cooking something up",
+  "Simmering", "Marinating on it", "Brewing", "Untangling threads", "Connecting dots",
+  "Piecing it together", "Sketching options", "Shuffling the deck", "Flipping through racks",
+  "Thrifting the internet", "Combing the aisles", "Peeking behind the curtain", "Reading the room",
+  "Checking vibes", "Tuning in", "Dialing it in", "Fine-tuning", "Zeroing in", "Homing in",
+  "Triangulating", "Calibrating", "Syncing up", "Mapping it out", "Charting a course", "Plotting",
+  "Scheming (the good kind)", "Conjuring options", "Summoning picks", "Assembling the lineup",
+  "Auditioning options", "Casting the net", "Trawling for finds", "Prospecting", "Panning for gold",
+  "Treasure hunting", "Sleuthing", "Snooping around", "Nosing about", "On the case",
+  "Hot on the trail", "Chasing the drip", "Securing the bag", "Bet, searching",
+];
+const TOOL_LABELS: Record<string, string> = {
+  search_products: "Searching the catalog",
+  browse_webpage: "Reading a product page",
+  browse_summary: "Skimming a product page",
+  run_merchant_checkout: "Walking through checkout",
+  add_item: "Adding to cart",
+  remove_item: "Updating cart",
+  replace_item: "Swapping items",
+  swap_item: "Swapping items",
+  lock_item: "Updating cart",
+  unlock_item: "Updating cart",
+  set_budget: "Updating budget",
+};
+
+function AgentActivity({ toolName }: { toolName: string | null }) {
+  const [wordIndex, setWordIndex] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setWordIndex((n) => (n + 1) % LOADING_WORDS.length), 1400);
+    return () => clearInterval(id);
+  }, []);
+  const label = toolName ? TOOL_LABELS[toolName] ?? "Working on it" : LOADING_WORDS[wordIndex];
+  return (
+    <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5 text-stone-600">
+      <span className="flex gap-0.5">
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.3s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400 [animation-delay:-0.15s]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-stone-400" />
+      </span>
+      {label}…
+    </span>
+  );
+}
+
+// No typography plugin installed — map tags to the existing text-sm scale.
+const MARKDOWN_COMPONENTS = {
+  p: (props: React.ComponentPropsWithoutRef<"p">) => <p className="mb-1 last:mb-0" {...props} />,
+  ul: (props: React.ComponentPropsWithoutRef<"ul">) => <ul className="mb-1 list-disc space-y-0.5 pl-4 last:mb-0" {...props} />,
+  ol: (props: React.ComponentPropsWithoutRef<"ol">) => <ol className="mb-1 list-decimal space-y-0.5 pl-4 last:mb-0" {...props} />,
+  a: (props: React.ComponentPropsWithoutRef<"a">) => <a target="_blank" rel="noreferrer" className="underline" {...props} />,
+  code: (props: React.ComponentPropsWithoutRef<"code">) => <code className="rounded bg-black/10 px-1 py-0.5 text-xs" {...props} />,
+  strong: (props: React.ComponentPropsWithoutRef<"strong">) => <strong className="font-semibold" {...props} />,
+};
+
+// Thumbnail opens a lightbox; the rest of the card is a separate link to the
+// merchant page — kept as siblings since nesting <a>/<button> is invalid HTML.
+function ProductThumb({ item, size = 48, onOpen }: { item: CartItem; size?: number; onOpen?: (image: LightboxImage) => void }) {
   const style = { width: size, height: size };
-  if (item.product?.imageUrl) {
-    // eslint-disable-next-line @next/next/no-img-element -- arbitrary merchant-hosted URLs, not part of the Next.js image pipeline
-    return <img src={item.product.imageUrl} alt={item.product.name} style={style} className="shrink-0 rounded-lg border border-stone-200 object-cover" />;
+  if (!item.product?.imageUrl) {
+    return <div style={style} className="shrink-0 rounded-lg border border-stone-200 bg-stone-100" aria-hidden="true" />;
   }
-  return <div style={style} className="shrink-0 rounded-lg border border-stone-200 bg-stone-100" aria-hidden="true" />;
+  const img = (
+    // eslint-disable-next-line @next/next/no-img-element -- arbitrary merchant-hosted URLs, not part of the Next.js image pipeline
+    <img src={item.product.imageUrl} alt={item.product.name} style={style} className="shrink-0 rounded-lg border border-stone-200 object-cover" />
+  );
+  if (!onOpen) return img;
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen({ url: item.product!.imageUrl!, alt: item.product!.name })}
+      aria-label={`View a larger image of ${item.product.name}`}
+      className="shrink-0 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900"
+    >
+      {img}
+    </button>
+  );
+}
+
+// Links to the merchant page when one exists.
+function ProductLink({ url, className, children }: { url: string | null | undefined; className: string; children: React.ReactNode }) {
+  if (!url) return <div className={className}>{children}</div>;
+  return <a href={url} target="_blank" rel="noreferrer" className={`${className} hover:underline`}>{children}</a>;
+}
+
+function ImageLightbox({ image, onClose }: { image: LightboxImage | null; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (image && !dialog.open) dialog.showModal();
+    if (!image && dialog.open) dialog.close();
+  }, [image]);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      onClose={onClose}
+      onClick={(event) => { if (event.target === dialogRef.current) onClose(); }}
+      className="max-h-[90vh] max-w-[90vw] rounded-2xl bg-transparent p-0 backdrop:bg-black/70"
+    >
+      {image && (
+        // eslint-disable-next-line @next/next/no-img-element -- arbitrary merchant-hosted URL
+        <img src={image.url} alt={image.alt} className="max-h-[90vh] max-w-[90vw] rounded-2xl object-contain" />
+      )}
+    </dialog>
+  );
 }
 
 export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName: string | null }) {
@@ -28,7 +137,9 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
   const [checkout, setCheckout] = useState<Checkout | null>(null);
   const [paymentLinks, setPaymentLinks] = useState<Checkout | null>(null);
   const [browserProofs, setBrowserProofs] = useState<Record<string, CheckoutProof>>({});
+  const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [agentActivity, setAgentActivity] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [budgetInput, setBudgetInput] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -42,12 +153,14 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
         const returnedFromStripe = new URLSearchParams(window.location.search).has("merchant");
         const latestCheckout = returnedFromStripe ? await refreshPayments(boardId) : await getCheckout(boardId);
         const latestCart = await getCart(boardId);
-        const proofs = await getCheckoutProofs(boardId);
         if (!active) return;
         setCheckout(latestCheckout);
         setCart(latestCart);
-        setBrowserProofs(Object.fromEntries(proofs.map((proof) => [proof.productId, proof])));
         setBudgetInput(latestCart.budgetCents === null ? "" : String(latestCart.budgetCents / 100));
+        // Fetched separately so a failure here can't break cart/checkout loading.
+        getCheckoutProofs(boardId)
+          .then((proofs) => { if (active) setBrowserProofs(Object.fromEntries(proofs.map((proof) => [proof.productId, proof]))); })
+          .catch((cause) => console.error("Could not load checkout proofs:", cause));
         if (returnedFromStripe) {
           window.history.replaceState(window.history.state, "", window.location.pathname);
         }
@@ -68,31 +181,43 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
   async function sendToAgent(message: string, displayText = message) {
     if (!message.trim() || busy || cart?.status !== "open") return false;
     const priorItemIds = new Set(cart?.items.map((item) => item.id) ?? []);
-    setMessages((current) => [...current, { id: Date.now(), role: "shopper", text: displayText }]);
+    const streamId = Date.now() + 1;
+    setMessages((current) => [
+      ...current,
+      { id: streamId - 1, role: "shopper", text: displayText },
+      { id: streamId, role: "mosaic", text: "", streaming: true },
+    ]);
+    // Cleared immediately, not after the reply — a turn can take 10s+.
+    setQuery((current) => current.trim() === message.trim() ? "" : current);
     setBusy("shop");
     setError(null);
+    setAgentActivity(null);
     try {
-      const result = await shopWithAgent(boardId, message);
+      const result = await shopWithAgent(boardId, message, (event) => {
+        if (event.type === "tool-call") {
+          setAgentActivity(event.toolName);
+        } else if (event.type === "text-delta") {
+          setAgentActivity(null);
+          setMessages((current) => current.map((m) => m.id === streamId ? { ...m, text: m.text + event.text } : m));
+        }
+      });
       setCart(result.cart);
       setBudgetInput(result.cart.budgetCents === null ? "" : String(result.cart.budgetCents / 100));
-      setQuery((current) => current.trim() === message ? "" : current);
-      // Cart items the agent touched this turn (added, replaced, or swapped
-      // in) — their cart_item id is new even though the productId slot may
-      // be reused, so this catches add/replace/swap alike. Surfaced as a
-      // product card alongside the reply so the picked item's image and
-      // price are visible right in the chat, not just in the cart aside.
+      // Cart items the agent touched this turn — new cart_item ids, even if the productId slot was reused.
       const touchedItems = result.cart.items.filter((item) => !priorItemIds.has(item.id));
-      setMessages((current) => [...current, {
-        id: Date.now() + 1, role: "mosaic",
+      setMessages((current) => current.map((m) => m.id === streamId ? {
+        ...m,
         text: result.assistantMessage.trim() || "I reviewed your request. Check the cart for any changes.",
         products: touchedItems.length > 0 ? touchedItems : undefined,
       }]);
       return true;
     } catch (cause) {
+      setMessages((current) => current.filter((m) => m.id !== streamId));
       report(cause, "Could not shop for products");
       return false;
     } finally {
       setBusy(null);
+      setAgentActivity(null);
     }
   }
 
@@ -156,11 +281,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
     setBusy("checkout");
     setError(null);
     try {
-      // Two disjoint checkout paths per item's merchant (see
-      // .spec/browser-checkout-proof.md): 'browser' merchants have no API
-      // integration, so the agent drives their real site instead and stops
-      // with a screenshot right before payment. Everything else goes
-      // through the existing Stripe test-checkout flow.
+      // 'browser' merchants get the screenshot-proof flow; everything else uses Stripe test-checkout.
       const browserItems = cart.items.filter((item) => item.product?.checkoutMethod === "browser");
       const hasOtherItems = cart.items.some((item) => item.product && item.product.checkoutMethod !== "browser");
 
@@ -230,14 +351,25 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
           {messages.length === 0 && <p className="text-sm text-stone-500">Try “a warm ceramic lamp under $100” or “linen for my room”.</p>}
           {messages.map((message) => (
             <div key={message.id} className={`max-w-[90%] space-y-2 rounded-2xl px-4 py-2 text-sm ${message.role === "shopper" ? "ml-auto bg-stone-900 text-white" : "bg-[#efe4d2] text-stone-800"}`}>
-              <p>{message.text}</p>
+              {message.role === "mosaic" ? (
+                message.streaming && !message.text ? (
+                  <AgentActivity toolName={agentActivity} />
+                ) : (
+                  <div>
+                    <ReactMarkdown components={MARKDOWN_COMPONENTS}>{message.text}</ReactMarkdown>
+                    {message.streaming && <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-stone-500 align-text-bottom" aria-hidden="true" />}
+                  </div>
+                )
+              ) : (
+                <p>{message.text}</p>
+              )}
               {message.products?.map((item) => (
                 <div key={item.id} className="flex items-center gap-2 rounded-xl bg-white/60 p-2">
-                  <ProductThumb item={item} />
-                  <div className="min-w-0">
+                  <ProductThumb item={item} onOpen={setLightboxImage} />
+                  <ProductLink url={item.product?.productUrl} className="min-w-0">
                     <p className="truncate font-medium text-stone-900">{item.product?.name ?? "Unavailable product"}</p>
                     <p className="text-xs text-stone-600">{item.product ? money(item.product.priceCents, item.product.currency) : null}</p>
-                  </div>
+                  </ProductLink>
                 </div>
               ))}
             </div>
@@ -260,11 +392,11 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
             {cart.items.length === 0 && <p className="text-sm text-stone-500">No items yet. Ask Mosaic what you want to shop for.</p>}
             {cart.items.map((item) => <div key={item.id} className="border-b border-stone-100 pb-4 text-sm">
               <div className="flex gap-3">
-                <ProductThumb item={item} size={56} />
-                <div className="min-w-0 flex-1">
+                <ProductThumb item={item} size={56} onOpen={setLightboxImage} />
+                <ProductLink url={item.product?.productUrl} className="min-w-0 flex-1">
                   <div className="flex justify-between gap-3"><p className="truncate font-medium text-stone-900">{item.product?.name ?? "Unavailable product"}</p><p className="whitespace-nowrap">{money(item.subtotalCents, cart.currency)}</p></div>
                   <p className="mt-1 text-xs text-stone-500">{item.product?.merchantName ?? "Merchant unavailable"}</p>
-                </div>
+                </ProductLink>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                 <button type="button" aria-label={`Decrease ${item.product?.name ?? "item"} quantity`} disabled={Boolean(busy) || item.locked || item.quantity <= 1 || cart.status !== "open"} onClick={() => void changeItem(item, "decrease")} className="rounded border px-2 py-1 disabled:opacity-40">−</button>
@@ -324,6 +456,7 @@ export function BoardCommerce({ boardId, vibeName }: { boardId: string; vibeName
           <button type="button" disabled={Boolean(busy)} onClick={() => void checkPaymentStatus()} className="mt-2 w-full rounded-xl border border-stone-300 px-4 py-2.5 text-sm disabled:opacity-40">{busy === "refresh" ? "Checking…" : "Refresh payment status"}</button>
         </div>}
       </aside>
+      <ImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
     </div>
   );
 }

@@ -2,12 +2,11 @@ import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { assertBoardOwnership } from './board-ownership'
 import { notFoundError, validationError } from './errors'
+import { isGoogleInterstitialUrl, resolveDirectProductUrl } from './internetSearch'
 import { getProductsByIds } from './products'
 import { getSupabaseAdmin } from './supabase'
 
-// See .spec/browser-checkout-proof.md. Screenshots go here, not inline in
-// Postgres — the browser service returns base64, we upload it and store only
-// the resulting path (mirrors board-images.ts's IMAGE_BUCKET pattern).
+// See .spec/browser-checkout-proof.md. Mirrors board-images.ts's IMAGE_BUCKET pattern.
 export const CHECKOUT_PROOF_BUCKET = 'mosaic-checkout-proofs'
 const SIGNED_URL_TTL_SECONDS = 60 * 60
 const BROWSER_SERVICE_URL = process.env.BROWSER_SERVICE_URL ?? 'http://localhost:8100'
@@ -170,7 +169,15 @@ export async function runMerchantCheckout(
     )
   }
 
-  const result = await callBrowserService(product.productUrl, merchant, fetcher)
+  // productUrl is often a Google Shopping interstitial (see internetSearch.ts); resolve first or fail cleanly.
+  let productUrl = product.productUrl
+  if (isGoogleInterstitialUrl(productUrl)) {
+    const resolved = await resolveDirectProductUrl(`${product.name} ${product.merchantName}`)
+    if (!resolved) throw validationError(`Could not find ${product.merchantName}'s direct product page for checkout`)
+    productUrl = resolved
+  }
+
+  const result = await callBrowserService(productUrl, merchant, fetcher)
   const screenshotPath = await uploadScreenshot(boardId, productId, result.screenshotBase64, db)
 
   const { data, error } = await db
