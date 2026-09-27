@@ -51,7 +51,7 @@ export function DeleteBoardDialog({
         aria-describedby="delete-board-description"
         className="w-full max-w-md rounded-xl bg-[#faf6ee] p-6 shadow-2xl"
       >
-        <h2 id="delete-board-title" className="font-[family-name:var(--font-fraunces)] text-2xl text-stone-900">
+        <h2 id="delete-board-title" className="font-heading text-2xl text-stone-900">
           Delete “{board.name}”?
         </h2>
         <p id="delete-board-description" className="mt-2 text-sm text-stone-600">
